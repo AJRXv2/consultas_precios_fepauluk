@@ -25,9 +25,9 @@
                         <div class="lg:col-span-2">
                             <label for="proveedor" class="block text-lg font-semibold text-slate-200">Filtrar por proveedor (opcional)</label>
                             <select id="proveedor" name="proveedor" class="mt-3 w-full rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-xl text-white focus:border-amber-400 focus:outline-none focus:ring focus:ring-amber-400/40">
-                                <option value="" {% if not proveedor_filtro %}selected{% endif %}>Todos los proveedores</option>
+                                <option value="" {% if not proveedor_filtro %}selected{% endif %} class="bg-slate-800 text-white">Todos los proveedores</option>
                                 {% for nombre in lista_proveedores %}
-                                    <option value="{{ nombre }}" {% if nombre == proveedor_filtro %}selected{% endif %}>{{ nombre }}</option>
+                                    <option value="{{ nombre }}" {% if nombre == proveedor_filtro %}selected{% endif %} class="bg-slate-800 text-white">{{ nombre }}</option>
                                 {% endfor %}
                             </select>
                         </div>
