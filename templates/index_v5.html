@@ -40,6 +40,7 @@
                             <a href="#" onclick="showTab('busqueda')" id="tab-busqueda" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">Búsqueda</a>
                             <a href="#" onclick="showTab('calculos')" id="tab-calculos" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">Cálculos</a>
                             <a href="#" onclick="showTab('gestion')" id="tab-gestion" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">Gestión</a>
+                            <a href="#" onclick="showTab('ventas_avanzadas')" id="tab-ventas_avanzadas" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">Ventas Avanzadas</a>
                             <a href="#" onclick="showTab('historial')" id="tab-historial" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">Historial</a>
                         </nav>
                     </div>
@@ -80,8 +81,9 @@
                                         </div>
                                     </div>
 
-                                    <div class="mt-4">
+                                    <div class="mt-4 flex flex-col sm:flex-row gap-2">
                                         <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Buscar Producto</button>
+                                        <button type="button" data-url="{{ url_for('barcode_search') }}" onclick="window.open(this.dataset.url, '_blank', 'width=1200,height=800');" class="inline-flex justify-center rounded-md border border-transparent bg-amber-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-amber-700">Buscar por Código de Barras</button>
                                     </div>
 
                                     {# --- NUEVO CAMPO DE FILTRO --- #}
@@ -293,7 +295,17 @@
                                         </form>
                                     </div>
                                     <div>
-                                        <h2 class="text-xl font-semibold text-gray-900 mb-2">🕒 Últimas Actualizaciones de Listas</h2>
+                                        <h2 class="text-xl font-semibold text-gray-900 mb-2">�️ Sincronizar Listas a Base (PostgreSQL)</h2>
+                                        <div class="p-4 border rounded-md bg-gray-50 space-y-3">
+                                            <p class="text-sm text-gray-600">Importa/actualiza los productos de los archivos Excel hacia la base de datos. Requiere tener LISTAS_EN_DB=1 y PostgreSQL disponible.</p>
+                                            <div class="flex items-center gap-2">
+                                                <button type="button" id="btn-sync-listas" class="inline-flex justify-center rounded-md border border-transparent bg-emerald-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">Sincronizar ahora</button>
+                                                <span id="sync-status" class="text-xs text-gray-500"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h2 class="text-xl font-semibold text-gray-900 mb-2">�🕒 Últimas Actualizaciones de Listas</h2>
                                         {% if ultimas_actualizaciones %}
                                         <div class="overflow-x-auto max-h-64 border rounded-md">
                                             <table class="min-w-full divide-y divide-gray-200 text-sm">
@@ -369,6 +381,18 @@
                                             <p class="text-sm text-gray-500">No hay listas antiguas.</p>
                                         {% endif %}
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="content-ventas_avanzadas" class="tab-content hidden">
+                            <div class="space-y-6">
+                                <div>
+                                    <h2 class="text-xl font-semibold text-gray-900">🚀 Ventas Avanzadas</h2>
+                                    <p class="text-sm text-gray-600">Calcula ventas por unidad a partir del archivo <strong>productos_manual.xlsx</strong> (Columnas: A=Código, C=Nombre, D=Precio).</p>
+                                </div>
+                                <div id="ventas-avanzadas-dynamic">
+                                    {% include 'ventas_avanzadas_fragment.html' %}
                                 </div>
                             </div>
                         </div>
@@ -471,6 +495,88 @@
         document.addEventListener('DOMContentLoaded', function() {
             const activeTabOnLoad = "{{ active_tab | default('busqueda') }}";
             showTab(activeTabOnLoad);
+
+            // Botón de sincronización de listas a DB
+            const btnSync = document.getElementById('btn-sync-listas');
+            const syncStatus = document.getElementById('sync-status');
+            if (btnSync) {
+                btnSync.addEventListener('click', async () => {
+                    syncStatus.textContent = 'Sincronizando...';
+                    btnSync.disabled = true;
+                    try {
+                        const r = await fetch('/admin/sync_listas', { method: 'POST', headers: { 'Accept': 'application/json' } });
+                        const data = await r.json();
+                        if (data.ok) {
+                            const total = data.resumen?.insertados ?? 0;
+                            syncStatus.textContent = `OK: ${total} productos actualizados`;
+                            alert('Sincronización completa: ' + JSON.stringify(data.resumen));
+                        } else {
+                            syncStatus.textContent = 'Error';
+                            alert('Error en sincronización: ' + (data.error || 'desconocido'));
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        syncStatus.textContent = 'Error de red';
+                        alert('No se pudo conectar para sincronizar.');
+                    } finally {
+                        btnSync.disabled = false;
+                    }
+                });
+            }
+
+            const ventasRoot = document.getElementById('ventas-avanzadas-dynamic');
+            if (ventasRoot) {
+                // Variable para almacenar el botón que fue clickeado
+                let clickedButton = null;
+                
+                // Capturar qué botón de submit fue clickeado
+                ventasRoot.addEventListener('click', function(event) {
+                    if (event.target.type === 'submit') {
+                        clickedButton = event.target;
+                    }
+                }, true);
+                
+                ventasRoot.addEventListener('submit', async function(event) {
+                    const form = event.target;
+                    if (!(form instanceof HTMLFormElement)) {
+                        return;
+                    }
+                    event.preventDefault();
+                    const formData = new FormData(form);
+                    
+                    // Agregar el valor del botón clickeado al FormData
+                    if (clickedButton && clickedButton.name && clickedButton.value) {
+                        formData.set(clickedButton.name, clickedButton.value);
+                    }
+                    
+                    try {
+                        const response = await fetch(form.action || window.location.pathname, {
+                            method: form.method || 'POST',
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'same-origin',
+                            body: formData
+                        });
+                        if (!response.ok) {
+                            throw new Error('Respuesta no exitosa');
+                        }
+                        const payload = await response.json();
+                        if (payload && payload.html) {
+                            ventasRoot.innerHTML = payload.html;
+                        }
+                        if (typeof showTab === 'function') {
+                            showTab('ventas_avanzadas');
+                        }
+                    } catch (err) {
+                        console.error('Error al procesar Ventas Avanzadas:', err);
+                        alert('No se pudo actualizar la sección de Ventas Avanzadas. Intenta nuevamente.');
+                    } finally {
+                        clickedButton = null; // Resetear el botón clickeado
+                    }
+                });
+            }
         });
     </script>
 </body>

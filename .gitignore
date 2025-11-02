@@ -32,3 +32,21 @@ datos_v2.json
 listas_excel/*
 !listas_excel/.gitkeep
 auth.json
+
+# Archivos temporales y locales
+*.sqlite3
+app_v5.sqlite3
+*.bat
+*.exe
+Start_*.bat
+Open_*.bat
+
+# Archivos de test y debug
+test_*.py
+debug_*.py
+gestor_copia.py
+
+# Directorios de build
+build/
+dist/
+__pycache__/
