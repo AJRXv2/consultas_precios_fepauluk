@@ -31,7 +31,21 @@ git push origin main
 2. Seleccionar "Database" → "Add PostgreSQL"
 3. Railway creará automáticamente la variable `DATABASE_URL`
 
-#### 4. Configurar variables de entorno
+#### 4. Configurar Volume para persistir archivos Excel (IMPORTANTE)
+
+Los contenedores de Railway son efímeros y se recrean en cada deploy. Para que los archivos Excel no desaparezcan, necesitas crear un Volume:
+
+1. En tu servicio principal, ve a **"Settings"**
+2. Scroll hasta la sección **"Volumes"**
+3. Click en **"+ New Volume"**
+4. Configura:
+   - **Mount Path**: `/app/listas_excel`
+   - **Name**: Deja el nombre automático o usa `listas-excel`
+5. Click en **"Add"**
+
+✅ Ahora todos los archivos Excel que subas se guardarán en el Volume y persistirán entre deploys.
+
+#### 5. Configurar variables de entorno
 En la pestaña "Variables" del servicio principal, agregar:
 
 ```
@@ -41,13 +55,16 @@ USE_SQLITE=0
 DEBUG_LOG=0
 APP_TZ=America/Argentina/Buenos_Aires
 VENTAS_AVANZADAS_PER_PAGE=20
+LISTAS_PATH=/app/listas_excel
 ```
 
 Railway ya provee automáticamente:
 - `DATABASE_URL` (desde el servicio PostgreSQL)
 - `PORT` (puerto asignado por Railway)
 
-#### 5. Inicializar la base de datos (IMPORTANTE)
+**Nota sobre LISTAS_PATH**: Aunque la app usa `/app/listas_excel` por defecto, es buena práctica definirlo explícitamente para que coincida con el mount path del Volume.
+
+#### 6. Inicializar la base de datos (IMPORTANTE)
 
 **Si obtienes error "relation 'import_batches' does not exist":**
 
