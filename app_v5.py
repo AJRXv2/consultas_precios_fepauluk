@@ -119,8 +119,12 @@ def ensure_pg_tables():
         log_debug('ensure_pg_tables: no se pudo obtener conexión.')
         print('[ERROR] ensure_pg_tables: No se pudo conectar a PostgreSQL. Verifica DATABASE_URL.', flush=True)
         return
+    
+    # Configurar autocommit para que las tablas estén disponibles inmediatamente
+    conn.autocommit = True
+    
     try:
-        with conn, conn.cursor() as cur:
+        with conn.cursor() as cur:
             print('[INFO] Inicializando tablas PostgreSQL...', flush=True)
             cur.execute(
                 """
