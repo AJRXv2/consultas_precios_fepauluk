@@ -87,6 +87,15 @@ USE_SQLITE = os.getenv('USE_SQLITE', '1' if not DATABASE_URL else '0').strip().l
 DEBUG_LOG = os.getenv('DEBUG_LOG', '0').strip().lower() in ('1', 'true', 'yes', 'y')
 LISTAS_EN_DB = os.getenv('LISTAS_EN_DB', '0').strip().lower() in ('1', 'true', 'yes', 'y')
 
+# Print de configuración al iniciar
+print('=' * 60, flush=True)
+print('[CONFIG] Configuración de la aplicación:', flush=True)
+print(f'[CONFIG] DATABASE_URL: {"Configurado" if DATABASE_URL else "NO configurado"}', flush=True)
+print(f'[CONFIG] USE_SQLITE: {USE_SQLITE}', flush=True)
+print(f'[CONFIG] LISTAS_EN_DB: {LISTAS_EN_DB}', flush=True)
+print(f'[CONFIG] DEBUG_LOG: {DEBUG_LOG}', flush=True)
+print('=' * 60, flush=True)
+
 
 def log_debug(*parts):
     if DEBUG_LOG:
@@ -981,6 +990,7 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
 
     # Si está habilitado el modo listas en DB y hay PostgreSQL disponible
     if LISTAS_EN_DB and DATABASE_URL and psycopg:
+        print(f'[DEBUG buscar_productos_por_codigo_exacto] Buscando en DB: codigo={codigo_limpio}, prov_filter={prov_key_filter}', flush=True)
         try:
             with get_pg_conn() as conn, conn.cursor() as cur:
                 # Ampliar criterios de igualdad cuando el código ingresado es numérico:
@@ -1043,6 +1053,7 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                             (codigo_limpio,)
                         )
                 rows = cur.fetchall()
+                print(f'[DEBUG buscar_productos_por_codigo_exacto] Resultados de DB: {len(rows)} filas', flush=True)
                 if DEBUG_LOG:
                     log_debug(f'buscar_productos_por_codigo_exacto: encontrados {len(rows)} resultados')
                 
@@ -1158,8 +1169,12 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                 
                 # Sólo retornamos si hay resultados desde DB; si no, seguimos con fallback a Excel
                 if resultados:
+                    print(f'[DEBUG buscar_productos_por_codigo_exacto] Retornando {len(resultados)} resultados de DB', flush=True)
                     return resultados
+                else:
+                    print(f'[DEBUG buscar_productos_por_codigo_exacto] No hay resultados en DB, usando fallback a Excel', flush=True)
         except Exception as exc:
+            print(f'[ERROR buscar_productos_por_codigo_exacto] Error en DB: {exc}', flush=True)
             log_debug('buscar_productos_por_codigo_exacto(DB): error, se usa fallback Excel', exc)
 
     # Fallback a Excel
@@ -1513,78 +1528,122 @@ def sync_listas_to_db():
     Reemplaza por archivo (DELETE + INSERT en transacción) y registra lote en import_batches.
     Devuelve un dict resumen.
     """
+    print("[DEBUG sync_listas_to_db] === INICIO DE SINCRONIZACIÓN ===")
     resumen = {'procesados': 0, 'insertados': 0, 'archivos': []}
     if not (DATABASE_URL and psycopg):
+        print("[DEBUG sync_listas_to_db] ERROR: PostgreSQL no disponible")
         return {'error': 'PostgreSQL no disponible.'}
+    print(f"[DEBUG sync_listas_to_db] PostgreSQL disponible, LISTAS_PATH={LISTAS_PATH}")
+
+    print(f"[DEBUG sync_listas_to_db] PostgreSQL disponible, LISTAS_PATH={LISTAS_PATH}")
 
     prov_cfg = _listas_provider_configs()
     try:
         excel_files = sorted(f for f in os.listdir(LISTAS_PATH) if f.lower().endswith(('.xlsx', '.xls')) and 'old' not in f.lower())
+        print(f"[DEBUG sync_listas_to_db] Archivos Excel encontrados: {len(excel_files)} -> {excel_files}")
     except Exception as exc:
+        print(f"[DEBUG sync_listas_to_db] ERROR al listar {LISTAS_PATH}: {exc}")
         return {'error': f'No se pudo listar {LISTAS_PATH}: {exc}'}
 
+    print("[DEBUG sync_listas_to_db] Obteniendo conexión PostgreSQL...")
     with get_pg_conn() as conn, conn.cursor() as cur:
+        print("[DEBUG sync_listas_to_db] Conexión obtenida, iniciando procesamiento de archivos...")
         for filename in excel_files:
+            print(f"[DEBUG sync_listas_to_db] --- Procesando archivo: {filename} ---")
+            print(f"[DEBUG sync_listas_to_db] --- Procesando archivo: {filename} ---")
             provider_key = provider_key_from_filename(filename)
+            print(f"[DEBUG sync_listas_to_db] provider_key inicial: {provider_key}")
             cfg = prov_cfg.get(provider_key)
             if not cfg:
                 # Proveedor desconocido para el importador → intentar inferir usando nombres_base de proveedores
+                print(f"[DEBUG sync_listas_to_db] No hay cfg para {provider_key}, intentando inferir...")
                 try:
                     inferred_base = inferir_nombre_base_archivo(filename, proveedores)
                     inferred_key = provider_name_to_key(inferred_base)
                     cfg = prov_cfg.get(inferred_key)
                     if cfg:
                         provider_key = inferred_key
+                        print(f"[DEBUG sync_listas_to_db] Proveedor inferido: {provider_key}")
                     else:
                         # No se pudo inferir, saltar archivo
+                        print(f"[DEBUG sync_listas_to_db] No se pudo inferir proveedor para {filename}, se omite")
                         log_debug('sync_listas_to_db: proveedor no reconocido, se omite', filename, '-> key:', provider_key)
                         continue
                 except Exception as _inf_err:
+                    print(f"[DEBUG sync_listas_to_db] Error infiriendo proveedor para {filename}: {_inf_err}")
                     log_debug('sync_listas_to_db: error infiriendo proveedor para', filename, _inf_err)
                     continue
+            else:
+                print(f"[DEBUG sync_listas_to_db] cfg encontrado para provider_key: {provider_key}")
+            
             file_path = os.path.join(LISTAS_PATH, filename)
             try:
                 mtime = os.path.getmtime(file_path)
+                print(f"[DEBUG sync_listas_to_db] mtime del archivo: {mtime}")
             except Exception:
                 mtime = 0.0
+                print(f"[DEBUG sync_listas_to_db] No se pudo obtener mtime, usando 0.0")
 
             # Leer todas las hojas respetando header
             header = cfg.get('header', 0)
+            print(f"[DEBUG sync_listas_to_db] Leyendo Excel con header={header}...")
             try:
                 all_sheets = pd.read_excel(file_path, sheet_name=None, header=header)
+                print(f"[DEBUG sync_listas_to_db] Excel leído exitosamente, hojas: {list(all_sheets.keys())}")
             except Exception as exc:
+                print(f"[DEBUG sync_listas_to_db] ERROR leyendo {filename}: {exc}")
                 log_debug('sync_listas_to_db: error leyendo', filename, exc)
                 continue
 
             # Crear batch y limpiar productos previos de este archivo (transacción)
+            print(f"[DEBUG sync_listas_to_db] Creando batch para {filename}...")
+            cur.execute(
+                "INSERT INTO import_batches (proveedor_key, archivo, mtime, status) VALUES (%s,%s,%s,%s) RETURNING id",
+                (provider_key, filename, mtime, 'running')
+            )
+            # Crear batch y limpiar productos previos de este archivo (transacción)
+            print(f"[DEBUG sync_listas_to_db] Creando batch para {filename}...")
             cur.execute(
                 "INSERT INTO import_batches (proveedor_key, archivo, mtime, status) VALUES (%s,%s,%s,%s) RETURNING id",
                 (provider_key, filename, mtime, 'running')
             )
             _row = cur.fetchone()
             batch_id = (_row['id'] if isinstance(_row, dict) else _row[0]) if _row is not None else None
+            print(f"[DEBUG sync_listas_to_db] Batch creado con ID: {batch_id}")
             total_insertados = 0
             # Reemplazo por archivo
+            print(f"[DEBUG sync_listas_to_db] Eliminando productos previos de {filename}...")
             cur.execute("DELETE FROM productos_listas WHERE archivo=%s", (filename,))
+            deleted_rows = cur.rowcount
+            print(f"[DEBUG sync_listas_to_db] Eliminados {deleted_rows} registros previos")
 
             proveedor_display = get_proveedor_display_name(provider_key)
+            print(f"[DEBUG sync_listas_to_db] proveedor_display: {proveedor_display}")
 
             for sheet_name, df in all_sheets.items():
+                print(f"[DEBUG sync_listas_to_db] Procesando hoja: {sheet_name}, filas: {len(df) if df is not None else 0}")
                 if df is None or df.empty:
+                    print(f"[DEBUG sync_listas_to_db] Hoja {sheet_name} está vacía, saltando...")
                     continue
                 # Mantener nombres originales y también versión normalizada para búsqueda
                 df_columns = list(df.columns)
                 # Intentar mapear columnas según aliases
                 codigo_col = _find_first_col(df_columns, cfg.get('codigo', []))
                 nombre_col = _find_first_col(df_columns, cfg.get('nombre', []))
+                print(f"[DEBUG sync_listas_to_db] Columnas detectadas - codigo_col: {codigo_col}, nombre_col: {nombre_col}")
                 iva_col = _find_first_col(df_columns, cfg.get('iva', []))
                 precio_canon_col = _find_first_col(df_columns, cfg.get('precio_canon', []))
                 precios_extra_alias = cfg.get('precios_extra', []) or []
                 extra_cols = [c for c in df_columns if normalize_text(str(c)) in [normalize_text(x) for x in precios_extra_alias]]
 
                 if not codigo_col or not nombre_col:
+                    print(f"[DEBUG sync_listas_to_db] Hoja {sheet_name}: no se encontraron columnas código/nombre, saltando...")
                     continue
 
+                # OPTIMIZACIÓN: Recopilar todos los datos en un batch antes de insertar
+                batch_data = []
+                filas_insertadas_hoja = 0
+                
                 for _, fila in df.iterrows():
                     # Código
                     raw_code = fila.get(codigo_col)
@@ -1611,8 +1670,6 @@ def sync_listas_to_db():
                     iva_text = None
                     if iva_col and pd.notna(fila.get(iva_col)):
                         raw_iva = fila.get(iva_col)
-                        if DEBUG_LOG:
-                            log_debug(f'sync_listas_to_db: raw_iva ANTES de procesar = {raw_iva} (tipo: {type(raw_iva)})')
                         
                         # Si es numérico, convertir a porcentaje
                         if isinstance(raw_iva, (int, float)):
@@ -1644,9 +1701,6 @@ def sync_listas_to_db():
                             except:
                                 # Si no se puede convertir, guardar tal cual
                                 iva_text = str(raw_iva).strip()
-                        
-                        if DEBUG_LOG and iva_text:
-                            log_debug(f'sync_listas_to_db: codigo={code}, iva_text FINAL="{iva_text}", proveedor={provider_key}')
 
                     # Otros precios visibles
                     precios_dict = {}
@@ -1673,7 +1727,23 @@ def sync_listas_to_db():
                     nombre_norm = normalize_text(formatear_pulgadas(name))
                     codigo_norm = normalize_text(code)
 
-                    cur.execute(
+                    # Agregar a batch en lugar de insertar inmediatamente
+                    batch_data.append((
+                        provider_key, proveedor_display, filename, sheet_name, mtime,
+                        code, codigo_digitos, codigo_norm,
+                        name, nombre_norm,
+                        float(price_val) if price_val is not None else None,
+                        cfg.get('precio_canon', ['precio'])[0],
+                        iva_text,
+                        json.dumps(precios_dict, ensure_ascii=False),
+                        json.dumps(extra, ensure_ascii=False),
+                        batch_id
+                    ))
+                
+                # Insertar todos los datos de la hoja en un solo batch usando executemany
+                if batch_data:
+                    print(f"[DEBUG sync_listas_to_db] Insertando {len(batch_data)} filas en batch...")
+                    cur.executemany(
                         """
                         INSERT INTO productos_listas
                         (proveedor_key, proveedor_nombre, archivo, hoja, mtime,
@@ -1682,21 +1752,16 @@ def sync_listas_to_db():
                          precio, precio_fuente, iva, precios, extra_datos, batch_id)
                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s)
                         """,
-                        (
-                            provider_key, proveedor_display, filename, sheet_name, mtime,
-                            code, codigo_digitos, codigo_norm,
-                            name, nombre_norm,
-                            float(price_val) if price_val is not None else None,
-                            cfg.get('precio_canon', ['precio'])[0],
-                            iva_text,
-                            json.dumps(precios_dict, ensure_ascii=False),
-                            json.dumps(extra, ensure_ascii=False),
-                            batch_id
-                        )
+                        batch_data
                     )
-                    total_insertados += 1
+                    filas_insertadas_hoja = len(batch_data)
+                    total_insertados += filas_insertadas_hoja
+                    print(f"[DEBUG sync_listas_to_db] Batch insertado exitosamente: {filas_insertadas_hoja} filas")
+                
+                print(f"[DEBUG sync_listas_to_db] Hoja {sheet_name}: insertadas {filas_insertadas_hoja} filas")
 
             # Cerrar batch
+            print(f"[DEBUG sync_listas_to_db] Cerrando batch {batch_id}, total insertados: {total_insertados}")
             cur.execute(
                 "UPDATE import_batches SET status=%s, completed_at=NOW(), total_rows=%s WHERE id=%s",
                 ('completed', total_insertados, batch_id)
@@ -1705,10 +1770,13 @@ def sync_listas_to_db():
             resumen['procesados'] += 1
             resumen['insertados'] += total_insertados
             resumen['archivos'].append({'archivo': filename, 'filas': total_insertados, 'proveedor': provider_key})
+            print(f"[DEBUG sync_listas_to_db] Archivo {filename} completado: {total_insertados} productos")
 
     # Importar productos manuales a la misma tabla (proveedor_key='manual')
+    print("[DEBUG sync_listas_to_db] === Procesando productos_manual.xlsx ===")
     try:
         productos_manual, err = load_manual_products()
+        print(f"[DEBUG sync_listas_to_db] productos_manual cargados: {len(productos_manual) if productos_manual else 0}, error: {err}")
         if productos_manual:
             with get_pg_conn() as conn, conn.cursor() as cur:
                 # Buscar el archivo real (puede tener fecha agregada)
@@ -1748,7 +1816,11 @@ def sync_listas_to_db():
                 _row2 = cur.fetchone()
                 batch_id = (_row2['id'] if isinstance(_row2, dict) else _row2[0]) if _row2 is not None else None
                 cur.execute("DELETE FROM productos_listas WHERE archivo=%s", (filename,))
-                total_insertados = 0
+                deleted_manual = cur.rowcount
+                print(f"[DEBUG sync_listas_to_db] productos_manual: eliminados {deleted_manual} registros previos")
+                
+                # OPTIMIZACIÓN: Recopilar todos los datos en un batch antes de insertar
+                batch_data_manual = []
                 for p in productos_manual:
                     code = str(p.get('codigo', '')).strip()
                     name = str(p.get('nombre', '')).strip()
@@ -1761,7 +1833,19 @@ def sync_listas_to_db():
                     nombre_norm = normalize_text(formatear_pulgadas(name))
                     codigo_norm = normalize_text(code)
                     precios_dict = {'precio': float(price)}
-                    cur.execute(
+                    
+                    batch_data_manual.append((
+                        'manual', 'Manual', filename, '-', mtime,
+                        code, codigo_digitos, codigo_norm,
+                        name, nombre_norm,
+                        float(price), 'precio', json.dumps(precios_dict, ensure_ascii=False), json.dumps({}, ensure_ascii=False), batch_id
+                    ))
+                
+                # Insertar todos los productos manuales en un solo batch
+                total_insertados = 0
+                if batch_data_manual:
+                    print(f"[DEBUG sync_listas_to_db] productos_manual: insertando {len(batch_data_manual)} filas en batch...")
+                    cur.executemany(
                         """
                         INSERT INTO productos_listas
                         (proveedor_key, proveedor_nombre, archivo, hoja, mtime,
@@ -1770,14 +1854,11 @@ def sync_listas_to_db():
                          precio, precio_fuente, precios, extra_datos, batch_id)
                         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s)
                         """,
-                        (
-                            'manual', 'Manual', filename, '-', mtime,
-                            code, codigo_digitos, codigo_norm,
-                            name, nombre_norm,
-                            float(price), 'precio', json.dumps(precios_dict, ensure_ascii=False), json.dumps({}, ensure_ascii=False), batch_id
-                        )
+                        batch_data_manual
                     )
-                    total_insertados += 1
+                    total_insertados = len(batch_data_manual)
+                    print(f"[DEBUG sync_listas_to_db] productos_manual: batch insertado exitosamente")
+                
                 cur.execute(
                     "UPDATE import_batches SET status=%s, completed_at=NOW(), total_rows=%s WHERE id=%s",
                     ('completed', total_insertados, batch_id)
@@ -1785,11 +1866,15 @@ def sync_listas_to_db():
                 resumen['procesados'] += 1
                 resumen['insertados'] += total_insertados
                 resumen['archivos'].append({'archivo': filename, 'filas': total_insertados, 'proveedor': 'manual'})
+                print(f"[DEBUG sync_listas_to_db] productos_manual completado: {total_insertados} productos insertados")
         elif err:
+            print(f"[DEBUG sync_listas_to_db] productos_manual error: {err}")
             log_debug('sync_listas_to_db: productos_manual error', err)
     except Exception as exc:
+        print(f"[DEBUG sync_listas_to_db] ERROR importando manual: {exc}")
         log_debug('sync_listas_to_db: error importando manual', exc)
 
+    print(f"[DEBUG sync_listas_to_db] === FIN DE SINCRONIZACIÓN === Resumen: {resumen}")
     return resumen
 
 
@@ -1871,15 +1956,24 @@ def maybe_auto_sync_listas() -> dict | None:
     """Si las listas en DB están desactualizadas respecto a los Excel, ejecuta sync_listas_to_db().
     Devuelve el resumen del sync o None si no hizo nada o falló.
     """
+    print("[DEBUG maybe_auto_sync_listas] Verificando si se necesita sincronización...")
     if not (LISTAS_EN_DB and DATABASE_URL and psycopg):
+        print("[DEBUG maybe_auto_sync_listas] Condiciones no cumplidas (LISTAS_EN_DB o DATABASE_URL)")
         return None
     try:
-        if listas_db_desactualizadas():
+        desactualizadas = listas_db_desactualizadas()
+        print(f"[DEBUG maybe_auto_sync_listas] listas_db_desactualizadas() = {desactualizadas}")
+        if desactualizadas:
+            print('[DEBUG maybe_auto_sync_listas] Iniciando sincronización automática...')
             log_debug('maybe_auto_sync_listas: iniciando sincronización automática…')
             resumen = sync_listas_to_db()
+            print(f'[DEBUG maybe_auto_sync_listas] Sincronización completada, resumen: {resumen}')
             log_debug('maybe_auto_sync_listas: resumen', resumen)
             return resumen if isinstance(resumen, dict) else None
+        else:
+            print("[DEBUG maybe_auto_sync_listas] DB está actualizada, no se requiere sincronización")
     except Exception as exc:
+        print(f"[DEBUG maybe_auto_sync_listas] ERROR durante auto-sync: {exc}")
         log_debug('maybe_auto_sync_listas: error durante auto-sync', exc)
     return None
 
