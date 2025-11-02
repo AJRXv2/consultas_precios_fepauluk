@@ -2533,7 +2533,8 @@ def index():
                                         'iva': 'N/A',
                                         'precios': {'Precio': p.get('precio', 0.0)},
                                         'extra_datos': {},
-                                        'precios_calculados': {}
+                                        'precios_calculados': {},
+                                        'fuente': 'Excel'
                                     })
                         else:
                             # Búsqueda por nombre
@@ -2552,7 +2553,8 @@ def index():
                                             'iva': 'N/A',
                                             'precios': {'Precio': p.get('precio', 0.0)},
                                             'extra_datos': {},
-                                            'precios_calculados': {}
+                                            'precios_calculados': {},
+                                            'fuente': 'Excel'
                                         })
                                 else:
                                     if termino_norm in nombre_norm:
@@ -2565,7 +2567,8 @@ def index():
                                             'iva': 'N/A',
                                             'precios': {'Precio': p.get('precio', 0.0)},
                                             'extra_datos': {},
-                                            'precios_calculados': {}
+                                            'precios_calculados': {},
+                                            'fuente': 'Excel'
                                         })
 
                 # 2. Buscar en archivos Excel de proveedores

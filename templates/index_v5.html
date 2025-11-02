@@ -105,6 +105,13 @@
                                     {% for producto in productos_encontrados %}
                                     <div class="bg-gray-50 p-4 rounded-lg border shadow-sm">
                                         <p class="text-sm font-medium text-gray-900"><strong>PROVEEDOR:</strong> {{ producto.proveedor }}</p>
+                                        {% if producto.fuente %}
+                                        <p class="text-xs text-gray-500 mt-1">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if producto.fuente == 'DB' %}bg-blue-100 text-blue-800{% else %}bg-green-100 text-green-800{% endif %}">
+                                                Fuente: {{ producto.fuente }}
+                                            </span>
+                                        </p>
+                                        {% endif %}
                                         <p class="text-sm text-gray-600"><strong>CÓDIGO:</strong> {{ producto.codigo }}</p>
                                         <p class="text-sm text-gray-600"><strong>PRODUCTO:</strong> {{ producto.producto }}</p>
                                         <p class="text-sm text-gray-600"><strong>IVA DEL PRODUCTO:</strong> {{ producto.iva }}</p>
