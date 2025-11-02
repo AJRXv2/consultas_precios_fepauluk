@@ -91,9 +91,11 @@ LISTAS_EN_DB = os.getenv('LISTAS_EN_DB', '0').strip().lower() in ('1', 'true', '
 print('=' * 60, flush=True)
 print('[CONFIG] Configuración de la aplicación:', flush=True)
 print(f'[CONFIG] DATABASE_URL: {"Configurado" if DATABASE_URL else "NO configurado"}', flush=True)
+print(f'[CONFIG] psycopg disponible: {psycopg is not None}', flush=True)
 print(f'[CONFIG] USE_SQLITE: {USE_SQLITE}', flush=True)
 print(f'[CONFIG] LISTAS_EN_DB: {LISTAS_EN_DB}', flush=True)
 print(f'[CONFIG] DEBUG_LOG: {DEBUG_LOG}', flush=True)
+print(f'[CONFIG] Condición para búsqueda en DB: LISTAS_EN_DB={LISTAS_EN_DB} AND DATABASE_URL={bool(DATABASE_URL)} AND psycopg={psycopg is not None} = {LISTAS_EN_DB and DATABASE_URL and psycopg}', flush=True)
 print('=' * 60, flush=True)
 
 
@@ -4102,10 +4104,29 @@ def health():
         histo_len = len(load_historial())
     except Exception:
         histo_len = 'err'
+    
+    # Verificar si hay productos en la DB
+    productos_en_db = None
+    if DATABASE_URL and psycopg:
+        try:
+            with get_pg_conn() as conn:
+                if conn:
+                    with conn.cursor() as cur:
+                        cur.execute('SELECT COUNT(*) as total FROM productos_listas')
+                        row = cur.fetchone()
+                        if isinstance(row, dict):
+                            productos_en_db = row.get('total') or row.get('count') or list(row.values())[0]
+                        else:
+                            productos_en_db = row[0] if row else 0
+        except Exception as e:
+            productos_en_db = f'error: {e}'
+    
     return {
         'status': 'ok',
         'storage': modo_storage,
         'listas_en_db': LISTAS_EN_DB,
+        'database_url_configured': bool(DATABASE_URL),
+        'productos_en_db': productos_en_db,
         'proveedores': prov_count,
         'historial_count': histo_len,
         'debug': DEBUG_LOG
