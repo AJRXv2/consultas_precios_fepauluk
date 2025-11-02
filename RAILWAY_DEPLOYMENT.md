@@ -47,7 +47,34 @@ Railway ya provee automáticamente:
 - `DATABASE_URL` (desde el servicio PostgreSQL)
 - `PORT` (puerto asignado por Railway)
 
-#### 5. Deploy
+#### 5. Inicializar la base de datos (IMPORTANTE)
+
+**Si obtienes error "relation 'import_batches' does not exist":**
+
+Railway debe ejecutar `ensure_pg_tables()` automáticamente al iniciar, pero si las tablas no se crean, ejecuta manualmente desde el terminal de Railway:
+
+1. En Railway, ve a tu servicio → pestaña "Settings" → scroll hasta "Deploy Logs"
+2. Busca los mensajes `[INFO] Inicializando tablas PostgreSQL...` y `[SUCCESS] Tablas PostgreSQL verificadas`
+3. Si no aparecen o hay errores, abre el terminal de Railway (ícono de terminal en la esquina superior derecha)
+4. Ejecuta:
+```bash
+python init_db.py
+```
+
+Este script creará todas las tablas necesarias manualmente. Deberías ver:
+```
+[SUCCESS] ✓ Todas las tablas creadas correctamente.
+[INFO] Tablas encontradas en la base de datos:
+  - historial
+  - import_batches
+  - productos_listas
+  - proveedores
+  - usuarios
+```
+
+5. Reinicia el servicio después de la inicialización (Settings → "Restart")
+
+#### 6. Deploy
 1. Railway detectará automáticamente que es una app Python/Flask
 2. Usará `requirements.txt` para instalar dependencias
 3. Ejecutará el comando definido en `Procfile` o detectará `app_v5.py`
