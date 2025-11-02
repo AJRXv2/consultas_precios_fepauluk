@@ -117,9 +117,11 @@ def ensure_pg_tables():
     conn = get_pg_conn()
     if not conn:
         log_debug('ensure_pg_tables: no se pudo obtener conexión.')
+        print('[ERROR] ensure_pg_tables: No se pudo conectar a PostgreSQL. Verifica DATABASE_URL.', flush=True)
         return
     try:
         with conn, conn.cursor() as cur:
+            print('[INFO] Inicializando tablas PostgreSQL...', flush=True)
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS proveedores (
@@ -201,11 +203,17 @@ def ensure_pg_tables():
                     """
                 )
                 log_debug('ensure_pg_tables: índice GIN trgm creado o ya existe.')
+                print('[INFO] Índice GIN trgm creado.', flush=True)
             except Exception as trgm_err:
                 log_debug('ensure_pg_tables: no se pudo crear índice GIN trgm (¿pg_trgm no habilitado?):', trgm_err)
+                print(f'[WARN] Índice GIN trgm no creado (extensión pg_trgm no habilitada): {trgm_err}', flush=True)
+        
+        print('[SUCCESS] Tablas PostgreSQL verificadas correctamente.', flush=True)
         log_debug('ensure_pg_tables: tablas verificadas.')
     except Exception as e:
         log_debug('ensure_pg_tables: error creando tablas:', e)
+        print(f'[ERROR] Error crítico inicializando tablas: {e}', flush=True)
+        print(f'[ERROR] Traceback: {traceback.format_exc()}', flush=True)
     finally:
         try:
             conn.close()
