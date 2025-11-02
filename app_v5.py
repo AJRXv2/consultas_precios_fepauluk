@@ -2481,6 +2481,61 @@ def index():
                 productos_encontrados = []
                 proveedor_key_filter = provider_name_to_key(proveedor_buscado) if proveedor_buscado else ''
 
+                # 1. Buscar en productos_manual.xlsx primero (si no hay filtro de proveedor o es 'manual')
+                if not proveedor_key_filter or proveedor_key_filter == 'manual':
+                    productos_manual_list, err_manual = load_manual_products()
+                    if productos_manual_list and not err_manual:
+                        # Buscar por código o nombre
+                        if termino_busqueda.isdigit() and len(termino_busqueda) > 2:
+                            # Búsqueda por código
+                            for p in productos_manual_list:
+                                codigo_str = str(p.get('codigo', '')).strip()
+                                if codigo_str == termino_busqueda:
+                                    productos_encontrados.append({
+                                        'codigo': codigo_str,
+                                        'producto': p.get('nombre', ''),
+                                        'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
+                                        'proveedor_key': 'manual',
+                                        'sheet_name': 'Manual',
+                                        'iva': 'N/A',
+                                        'precios': {'Precio': p.get('precio', 0.0)},
+                                        'extra_datos': {},
+                                        'precios_calculados': {}
+                                    })
+                        else:
+                            # Búsqueda por nombre
+                            termino_norm = normalize_text(formatear_pulgadas(termino_busqueda))
+                            palabras = [token for token in termino_norm.split() if token]
+                            for p in productos_manual_list:
+                                nombre_norm = normalize_text(formatear_pulgadas(p.get('nombre', '')))
+                                if palabras:
+                                    if all(palabra in nombre_norm for palabra in palabras):
+                                        productos_encontrados.append({
+                                            'codigo': str(p.get('codigo', '')),
+                                            'producto': p.get('nombre', ''),
+                                            'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
+                                            'proveedor_key': 'manual',
+                                            'sheet_name': 'Manual',
+                                            'iva': 'N/A',
+                                            'precios': {'Precio': p.get('precio', 0.0)},
+                                            'extra_datos': {},
+                                            'precios_calculados': {}
+                                        })
+                                else:
+                                    if termino_norm in nombre_norm:
+                                        productos_encontrados.append({
+                                            'codigo': str(p.get('codigo', '')),
+                                            'producto': p.get('nombre', ''),
+                                            'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
+                                            'proveedor_key': 'manual',
+                                            'sheet_name': 'Manual',
+                                            'iva': 'N/A',
+                                            'precios': {'Precio': p.get('precio', 0.0)},
+                                            'extra_datos': {},
+                                            'precios_calculados': {}
+                                        })
+
+                # 2. Buscar en archivos Excel de proveedores
                 try:
                     excel_files = sorted(os.listdir(LISTAS_PATH))
                 except Exception as exc:
@@ -3549,6 +3604,12 @@ def index():
     
     # Crear lista única de nombres base de proveedores para el dropdown
     lista_nombres_proveedores = sorted(list(set(p_data['nombre_base'] for p_data in proveedores.values())))
+    # Agregar "Manual" si existe productos_manual.xlsx
+    productos_manual_list, err_manual = load_manual_products()
+    if productos_manual_list and not err_manual:
+        if 'Manual' not in lista_nombres_proveedores:
+            lista_nombres_proveedores.append('Manual')
+            lista_nombres_proveedores.sort()
 
     if ventas_inputs["codigo"] and not ventas_producto_seleccionado:
         producto = next((p for p in productos_manual if str(p.get("codigo", "")) == ventas_inputs["codigo"]), None)
