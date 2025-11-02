@@ -2146,7 +2146,8 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
                     'precios': precios_a_mostrar,
                     'proveedor': proveedor_nombre or proveedor_key or '',
                     'proveedor_key': proveedor_key or '',
-                    'extra_datos': extra_datos or {}
+                    'extra_datos': extra_datos or {},
+                    'fuente': 'DB'
                 })
             return resultados, total
     except Exception as exc:
