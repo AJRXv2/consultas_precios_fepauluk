@@ -3942,6 +3942,12 @@ def barcode_search():
                     mensaje += f" Variantes probadas: {', '.join(codigos_intentados[:5])}{'...' if len(codigos_intentados) > 5 else ''}"
 
     lista_proveedores = sorted({p.get('nombre_base') for p in proveedores.values() if p.get('nombre_base')})
+    # Agregar "Manual" si existe productos_manual.xlsx
+    productos_manual_list, err_manual = load_manual_products()
+    if productos_manual_list and not err_manual:
+        if 'Manual' not in lista_proveedores:
+            lista_proveedores.append('Manual')
+            lista_proveedores.sort()
 
     return render_template(
         'barcode_search.html',
