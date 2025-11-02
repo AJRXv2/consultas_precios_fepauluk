@@ -3450,6 +3450,19 @@ def index():
                 mensaje = "⚠️ ARCHIVO NO VÁLIDO PARA ELIMINAR."
             active_tab = "gestion"
 
+        elif formulario == "borrar_lista_vigente":
+            fname = request.form.get('filename','')
+            if fname and fname.lower().endswith(('.xlsx','.xls')):
+                try:
+                    os.remove(os.path.join(LISTAS_PATH, fname))
+                    mensaje = f"✅ LISTA '{fname}' ELIMINADA."
+                    active_tab = "gestion"
+                except Exception as e:
+                    mensaje = f"❌ ERROR ELIMINANDO '{fname}': {e}"
+            else:
+                mensaje = "⚠️ ARCHIVO NO VÁLIDO PARA ELIMINAR."
+            active_tab = "gestion"
+
         elif formulario == "subir_lista":
             # Manejo de carga de archivos Excel
             active_tab = "gestion"  # Permanecer en gestión tras subir
