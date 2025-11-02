@@ -740,20 +740,52 @@ def parse_price_value(value):
 
 def load_manual_products():
     cache = getattr(load_manual_products, "_cache", {})
-    file_path = os.path.join(LISTAS_PATH, "productos_manual.xlsx")
+    
+    # Buscar archivo que empiece con 'productos_manual' (puede tener fecha agregada)
+    file_path = None
+    try:
+        archivos = os.listdir(LISTAS_PATH)
+        candidatos = []
+        for fname in archivos:
+            if fname.lower().startswith('productos_manual') and fname.lower().endswith(('.xlsx', '.xls')):
+                # Ignorar versiones OLD
+                if 'old' not in fname.lower():
+                    candidatos.append(fname)
+        
+        if candidatos:
+            # Si hay múltiples, tomar el más reciente por mtime
+            candidatos_con_mtime = []
+            for fname in candidatos:
+                fpath = os.path.join(LISTAS_PATH, fname)
+                try:
+                    mtime = os.path.getmtime(fpath)
+                    candidatos_con_mtime.append((fpath, mtime, fname))
+                except Exception:
+                    pass
+            
+            if candidatos_con_mtime:
+                # Ordenar por mtime descendente y tomar el más reciente
+                candidatos_con_mtime.sort(key=lambda x: x[1], reverse=True)
+                file_path = candidatos_con_mtime[0][0]
+    except Exception:
+        pass
+    
+    if not file_path:
+        file_path = os.path.join(LISTAS_PATH, "productos_manual.xlsx")
+    
     try:
         mtime = os.path.getmtime(file_path)
     except FileNotFoundError:
         mtime = None
     except Exception:
         mtime = None
-    if cache.get("mtime") == mtime:
+    if cache.get("mtime") == mtime and cache.get("file_path") == file_path:
         return cache.get("productos", []), cache.get("error")
 
     productos = []
     error = None
     if not os.path.isfile(file_path):
-        error = "⚠️ No se encontró el archivo 'productos_manual.xlsx' dentro de listas_excel."
+        error = "⚠️ No se encontró el archivo 'productos_manual.xlsx' (o variantes con fecha) dentro de listas_excel."
     else:
         try:
             # Leer columnas A (Código), B (Proveedor), C (Nombre), D (Precio)
@@ -782,12 +814,12 @@ def load_manual_products():
                 })
             productos.sort(key=lambda x: normalize_text(x["nombre"]))
             if not productos:
-                error = "⚠️ No se encontraron filas válidas en 'productos_manual.xlsx'."
+                error = "⚠️ No se encontraron filas válidas en archivo productos_manual."
         except Exception as exc:
-            error = f"❌ Error leyendo 'productos_manual.xlsx': {exc}"
+            error = f"❌ Error leyendo archivo productos_manual: {exc}"
             productos = []
 
-    load_manual_products._cache = {"mtime": mtime, "productos": productos, "error": error}
+    load_manual_products._cache = {"mtime": mtime, "file_path": file_path, "productos": productos, "error": error}
     return productos, error
 
 def buscar_productos_manual(productos, query):
@@ -1646,8 +1678,32 @@ def sync_listas_to_db():
         productos_manual, err = load_manual_products()
         if productos_manual:
             with get_pg_conn() as conn, conn.cursor() as cur:
-                filename = 'productos_manual.xlsx'
+                # Buscar el archivo real (puede tener fecha agregada)
+                filename = 'productos_manual.xlsx'  # valor por defecto
                 file_path = os.path.join(LISTAS_PATH, filename)
+                try:
+                    archivos = os.listdir(LISTAS_PATH)
+                    candidatos = []
+                    for fname in archivos:
+                        if fname.lower().startswith('productos_manual') and fname.lower().endswith(('.xlsx', '.xls')):
+                            if 'old' not in fname.lower():
+                                candidatos.append(fname)
+                    if candidatos:
+                        candidatos_con_mtime = []
+                        for fname in candidatos:
+                            fpath = os.path.join(LISTAS_PATH, fname)
+                            try:
+                                mt = os.path.getmtime(fpath)
+                                candidatos_con_mtime.append((fpath, mt, fname))
+                            except Exception:
+                                pass
+                        if candidatos_con_mtime:
+                            candidatos_con_mtime.sort(key=lambda x: x[1], reverse=True)
+                            file_path = candidatos_con_mtime[0][0]
+                            filename = candidatos_con_mtime[0][2]
+                except Exception:
+                    pass
+                
                 try:
                     mtime = os.path.getmtime(file_path)
                 except Exception:
