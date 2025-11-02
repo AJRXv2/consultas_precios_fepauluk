@@ -1259,6 +1259,39 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                 )
                 resultados.append(producto)
 
+    # Fallback adicional: buscar en productos_manual.xlsx si no hay filtro de proveedor o es 'manual'
+    if not prov_key_filter or prov_key_filter == 'manual':
+        try:
+            productos_manual_list, err_manual = load_manual_products()
+            if productos_manual_list and not err_manual:
+                for p in productos_manual_list:
+                    codigo_str = str(p.get('codigo', '')).strip()
+                    # Comparar código exacto (texto o solo dígitos)
+                    codigo_dig = ''.join(ch for ch in codigo_str if ch.isdigit())
+                    codigo_limpio_dig = ''.join(ch for ch in codigo_limpio if ch.isdigit())
+                    
+                    if (codigo_str == codigo_limpio or 
+                        codigo_dig == codigo_limpio_dig or 
+                        (codigo_dig and codigo_limpio_dig and codigo_dig.lstrip('0') == codigo_limpio_dig.lstrip('0'))):
+                        
+                        # Verificar que no esté duplicado
+                        ya_existe = any(r.get('codigo') == codigo_str and r.get('proveedor_key') == 'manual' for r in resultados)
+                        if not ya_existe:
+                            resultados.append({
+                                'codigo': codigo_str,
+                                'producto': formatear_pulgadas(p.get('nombre', '')),
+                                'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
+                                'proveedor_key': 'manual',
+                                'sheet_name': 'Manual',
+                                'iva': 'N/A',
+                                'precios': {'Precio': p.get('precio', 0.0)},
+                                'extra_datos': {},
+                                'precios_calculados': {},
+                                'fuente': 'Excel'
+                            })
+        except Exception as exc:
+            log_debug('buscar_productos_por_codigo_exacto: error en productos_manual', exc)
+
     resultados.sort(key=lambda p: (p.get('proveedor', ''), p.get('codigo', '')))
     return resultados
 
