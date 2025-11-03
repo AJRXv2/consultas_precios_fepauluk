@@ -2071,7 +2071,7 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
             # Obtener resultados paginados
             cur.execute(
                 f"""
-                SELECT codigo, nombre, precio, precios, proveedor_key, proveedor_nombre, extra_datos, iva
+                SELECT codigo, nombre, precio, precios, proveedor_key, proveedor_nombre, extra_datos
                 FROM productos_listas
                 WHERE {where_sql}
                 ORDER BY proveedor_nombre ASC, nombre_normalizado ASC
@@ -2089,9 +2089,8 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
                     proveedor_key = r.get('proveedor_key')
                     proveedor_nombre = r.get('proveedor_nombre')
                     extra_datos = r.get('extra_datos')
-                    iva_text = r.get('iva')
                 else:
-                    codigo, nombre, precio, precios, proveedor_key, proveedor_nombre, extra_datos, iva_text = r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]
+                    codigo, nombre, precio, precios, proveedor_key, proveedor_nombre, extra_datos = r[0], r[1], r[2], r[3], r[4], r[5], r[6]
                 
                 # Parsear JSONB si viene como string
                 if isinstance(precios, str):
@@ -2148,7 +2147,6 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
                     'proveedor': proveedor_nombre or proveedor_key or '',
                     'proveedor_key': proveedor_key or '',
                     'extra_datos': extra_datos or {},
-                    'iva': iva_text,
                     'fuente': 'DB'
                 })
             return resultados, total
@@ -2613,31 +2611,8 @@ def index():
                 productos_encontrados = []
                 proveedor_key_filter = provider_name_to_key(proveedor_buscado) if proveedor_buscado else ''
 
-                # 0. Buscar en DB primero si está habilitado
-                if LISTAS_EN_DB and DATABASE_URL and psycopg:
-                    try:
-                        resultados_db, total_db = buscar_productos_avanzados_db(
-                            termino_busqueda, 1, 200,
-                            proveedor_filter=(proveedor_key_filter or None)
-                        )
-                        for r in resultados_db:
-                            productos_encontrados.append({
-                                'codigo': r.get('codigo', ''),
-                                'producto': r.get('nombre', ''),
-                                'proveedor': r.get('proveedor', ''),
-                                'proveedor_key': r.get('proveedor_key', ''),
-                                'sheet_name': '-',
-                                'iva': r.get('iva', 'N/A'),
-                                'precios': r.get('precios', {}),
-                                'extra_datos': r.get('extra_datos', {}),
-                                'precios_calculados': {},
-                                'fuente': 'DB'
-                            })
-                    except Exception as _db_err:
-                        log_debug('consulta_producto: error buscando en DB', _db_err)
-
-                # 1. Buscar en productos_manual.xlsx y 2. Excel solo si no hubo resultados en DB
-                if not productos_encontrados and (not proveedor_key_filter or proveedor_key_filter == 'manual'):
+                # 1. Buscar en productos_manual.xlsx primero (si no hay filtro de proveedor o es 'manual')
+                if not proveedor_key_filter or proveedor_key_filter == 'manual':
                     productos_manual_list, err_manual = load_manual_products()
                     if productos_manual_list and not err_manual:
                         # Buscar por código o nombre
@@ -2693,13 +2668,12 @@ def index():
                                             'fuente': 'Excel'
                                         })
 
-                # 2. Buscar en archivos Excel de proveedores (solo si aún no hay resultados)
-                if not productos_encontrados:
-                    try:
-                        excel_files = sorted(os.listdir(LISTAS_PATH))
-                    except Exception as exc:
-                        mensaje = f"❌ ERROR LISTANDO ARCHIVOS: {exc}"
-                        excel_files = []
+                # 2. Buscar en archivos Excel de proveedores
+                try:
+                    excel_files = sorted(os.listdir(LISTAS_PATH))
+                except Exception as exc:
+                    mensaje = f"❌ ERROR LISTANDO ARCHIVOS: {exc}"
+                    excel_files = []
 
                 for filename in excel_files:
                     if not filename.lower().endswith(('.xlsx', '.xls')):
