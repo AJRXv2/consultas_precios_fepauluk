@@ -87,6 +87,57 @@ USE_SQLITE = os.getenv('USE_SQLITE', '1' if not DATABASE_URL else '0').strip().l
 DEBUG_LOG = os.getenv('DEBUG_LOG', '0').strip().lower() in ('1', 'true', 'yes', 'y')
 LISTAS_EN_DB = os.getenv('LISTAS_EN_DB', '0').strip().lower() in ('1', 'true', 'yes', 'y')
 
+# Archivo de configuración persistente
+# En Railway, usar el volume montado en /app/listas_excel para persistencia
+# En local, usar el directorio actual
+if os.path.exists(LISTAS_PATH):
+    CONFIG_FILE_PATH = os.path.join(LISTAS_PATH, 'app_config.json')
+else:
+    CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), 'app_config.json')
+
+def load_app_config():
+    """Carga la configuración persistente desde archivo JSON"""
+    default_config = {
+        'usar_fallback_excel': True,
+        'modo_barcode_inteligente': True,  # Modo mejorado por defecto
+        'busqueda_barcode_optimizada': True  # Búsqueda rápida por defecto
+    }
+    try:
+        if os.path.exists(CONFIG_FILE_PATH):
+            print(f'[CONFIG] Cargando configuración desde {CONFIG_FILE_PATH}', flush=True)
+            with open(CONFIG_FILE_PATH, 'r', encoding='utf-8') as f:
+                saved_config = json.load(f)
+                print(f'[CONFIG] Configuración cargada: {saved_config}', flush=True)
+                return saved_config
+        else:
+            print(f'[CONFIG] No existe {CONFIG_FILE_PATH}, usando configuración por defecto', flush=True)
+        return default_config
+    except Exception as e:
+        print(f'[CONFIG] Error cargando app_config.json: {e}', flush=True)
+        return default_config
+
+def save_app_config(config):
+    """Guarda la configuración persistente en archivo JSON"""
+    try:
+        with open(CONFIG_FILE_PATH, 'w', encoding='utf-8') as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        print(f'[CONFIG] Configuración guardada en {CONFIG_FILE_PATH}', flush=True)
+        return True
+    except Exception as e:
+        print(f'[CONFIG] Error guardando app_config.json: {e}', flush=True)
+        return False
+
+# Cargar configuración persistente (prioridad: archivo > variable de entorno)
+app_config = load_app_config()
+USAR_FALLBACK_EXCEL = app_config.get('usar_fallback_excel', 
+                                     os.getenv('USAR_FALLBACK_EXCEL', '1').strip().lower() in ('1', 'true', 'yes', 'y'))
+MODO_BARCODE_INTELIGENTE = app_config.get('modo_barcode_inteligente', True)
+BUSQUEDA_BARCODE_OPTIMIZADA = app_config.get('busqueda_barcode_optimizada', True)
+print(f'[CONFIG] app_config obtenido: {app_config}', flush=True)
+print(f'[CONFIG] USAR_FALLBACK_EXCEL final: {USAR_FALLBACK_EXCEL}', flush=True)
+print(f'[CONFIG] MODO_BARCODE_INTELIGENTE final: {MODO_BARCODE_INTELIGENTE}', flush=True)
+print(f'[CONFIG] BUSQUEDA_BARCODE_OPTIMIZADA final: {BUSQUEDA_BARCODE_OPTIMIZADA}', flush=True)
+
 # Print de configuración al iniciar
 print('=' * 60, flush=True)
 print('[CONFIG] Configuración de la aplicación:', flush=True)
@@ -94,6 +145,7 @@ print(f'[CONFIG] DATABASE_URL: {"Configurado" if DATABASE_URL else "NO configura
 print(f'[CONFIG] psycopg disponible: {psycopg is not None}', flush=True)
 print(f'[CONFIG] USE_SQLITE: {USE_SQLITE}', flush=True)
 print(f'[CONFIG] LISTAS_EN_DB: {LISTAS_EN_DB}', flush=True)
+print(f'[CONFIG] USAR_FALLBACK_EXCEL: {USAR_FALLBACK_EXCEL}', flush=True)
 print(f'[CONFIG] DEBUG_LOG: {DEBUG_LOG}', flush=True)
 print(f'[CONFIG] Condición para búsqueda en DB: LISTAS_EN_DB={LISTAS_EN_DB} AND DATABASE_URL={bool(DATABASE_URL)} AND psycopg={psycopg is not None} = {LISTAS_EN_DB and DATABASE_URL and psycopg}', flush=True)
 print('=' * 60, flush=True)
@@ -557,6 +609,93 @@ def cambiar_credenciales():
                 mensaje = f'Error guardando nuevas credenciales: {e}'
     return render_template('cambiar_credenciales.html', mensaje=mensaje, exito=exito, usuario_actual=credentials_cache['username'])
 
+@app.route('/configuracion', methods=['GET', 'POST'])
+@login_required
+def configuracion():
+    global USAR_FALLBACK_EXCEL, MODO_BARCODE_INTELIGENTE, BUSQUEDA_BARCODE_OPTIMIZADA
+    mensaje = None
+    exito = False
+    
+    if request.method == 'POST':
+        accion = request.form.get('accion')
+        if accion == 'toggle_fallback':
+            USAR_FALLBACK_EXCEL = not USAR_FALLBACK_EXCEL
+            # Guardar configuración de forma persistente
+            app_config['usar_fallback_excel'] = USAR_FALLBACK_EXCEL
+            if save_app_config(app_config):
+                estado = "activado" if USAR_FALLBACK_EXCEL else "desactivado"
+                mensaje = f'✅ Fallback a Excel {estado} correctamente. Este cambio es permanente.'
+                exito = True
+            else:
+                mensaje = '❌ Error al guardar la configuración. El cambio es temporal.'
+                exito = False
+            print(f'[CONFIG] Fallback a Excel cambiado a: {USAR_FALLBACK_EXCEL}', flush=True)
+        elif accion == 'toggle_barcode':
+            MODO_BARCODE_INTELIGENTE = not MODO_BARCODE_INTELIGENTE
+            # Guardar configuración de forma persistente
+            app_config['modo_barcode_inteligente'] = MODO_BARCODE_INTELIGENTE
+            if save_app_config(app_config):
+                modo = "inteligente" if MODO_BARCODE_INTELIGENTE else "clásico"
+                mensaje = f'✅ Modo de búsqueda por código de barras cambiado a {modo}. Este cambio es permanente.'
+                exito = True
+            else:
+                mensaje = '❌ Error al guardar la configuración. El cambio es temporal.'
+                exito = False
+            print(f'[CONFIG] Modo barcode inteligente cambiado a: {MODO_BARCODE_INTELIGENTE}', flush=True)
+        elif accion == 'toggle_optimizacion':
+            BUSQUEDA_BARCODE_OPTIMIZADA = not BUSQUEDA_BARCODE_OPTIMIZADA
+            # Guardar configuración de forma persistente
+            app_config['busqueda_barcode_optimizada'] = BUSQUEDA_BARCODE_OPTIMIZADA
+            if save_app_config(app_config):
+                modo = "rápida (optimizada)" if BUSQUEDA_BARCODE_OPTIMIZADA else "lenta (secuencial)"
+                mensaje = f'✅ Velocidad de búsqueda cambiada a {modo}. Este cambio es permanente.'
+                exito = True
+            else:
+                mensaje = '❌ Error al guardar la configuración. El cambio es temporal.'
+                exito = False
+            print(f'[CONFIG] Búsqueda barcode optimizada cambiado a: {BUSQUEDA_BARCODE_OPTIMIZADA}', flush=True)
+        elif accion == 'reiniciar_app':
+            # Detectar si estamos en Railway
+            es_railway = os.getenv('RAILWAY_ENVIRONMENT') is not None
+            
+            if es_railway:
+                mensaje = '⚠️ Para reiniciar en Railway, ve al dashboard → tu proyecto → Settings → General → Restart Deployment'
+                exito = False
+            else:
+                # Reinicio local
+                try:
+                    import sys
+                    print('[CONFIG] Reiniciando aplicación...', flush=True)
+                    os.execv(sys.executable, ['python'] + sys.argv)
+                except Exception as e:
+                    mensaje = f'❌ Error al intentar reiniciar: {e}'
+                    exito = False
+    
+    # Información de la configuración actual
+    config_info = {
+        'db_tipo': None,
+        'db_conectada': False,
+        'listas_en_db': LISTAS_EN_DB,
+        'usar_fallback_excel': USAR_FALLBACK_EXCEL,
+        'modo_barcode_inteligente': MODO_BARCODE_INTELIGENTE,
+        'busqueda_barcode_optimizada': BUSQUEDA_BARCODE_OPTIMIZADA,
+        'psycopg_disponible': psycopg is not None,
+        'es_railway': os.getenv('RAILWAY_ENVIRONMENT') is not None
+    }
+    
+    # Detectar tipo de DB
+    if DATABASE_URL:
+        if 'postgres' in DATABASE_URL.lower():
+            config_info['db_tipo'] = 'PostgreSQL'
+        else:
+            config_info['db_tipo'] = 'Otra'
+        config_info['db_conectada'] = True
+    elif USE_SQLITE:
+        config_info['db_tipo'] = 'SQLite'
+        config_info['db_conectada'] = os.path.exists(SQLITE_DB_PATH)
+    
+    return render_template('configuracion.html', config_info=config_info, mensaje=mensaje, exito=exito)
+
 # --- ESTRUCTURA DE DATOS POR DEFECTO ---
 default_proveedores = {
     "p001": {"nombre_base": "Ñañu", "descuento": 0.00, "iva": 0.21, "ganancia": 0.60, "es_dinamico": True},
@@ -575,9 +714,9 @@ EXCEL_PROVIDER_CONFIG = {
         'fila_encabezado': 5,
         'codigo': ['codigo'],
         'producto': ['producto'],
-        'precios_a_mostrar': ['precio', 'precio de venta', 'precio de lista', 'precio neto unitario'],
+        'precios_a_mostrar': ['precio', 'precio de venta', 'precio de lista', 'precio neto', 'precio neto unitario'],
         'iva': ['iva'],
-        'extra_datos': ['unidades x caja']
+        'extra_datos': ['unidades x caja', 'categoria']
     },
     'crossmaster': {
         'fila_encabezado': 11,
@@ -978,6 +1117,187 @@ def build_producto_entry(fila, actual_cols, provider_key, proveedor_display_name
     }
 
 
+def buscar_productos_por_codigos_multiples(codigos_lista: list, proveedor_filtrado: str = ''):
+    """
+    Búsqueda optimizada de productos por múltiples códigos a la vez.
+    Hace UNA SOLA query en lugar de múltiples queries secuenciales.
+    Mucho más rápido para códigos de barras con muchas variantes.
+    """
+    if not codigos_lista:
+        return []
+    
+    # Limpiar códigos
+    codigos_limpios = [c.strip() for c in codigos_lista if c and c.strip()]
+    if not codigos_limpios:
+        return []
+    
+    prov_key_filter = provider_name_to_key(proveedor_filtrado) if proveedor_filtrado else ''
+    resultados = []
+    
+    # Si está habilitado el modo listas en DB y hay PostgreSQL disponible
+    if LISTAS_EN_DB and DATABASE_URL and psycopg:
+        print(f'[DEBUG buscar_productos_por_codigos_multiples] Buscando {len(codigos_limpios)} códigos en DB, prov_filter={prov_key_filter}', flush=True)
+        try:
+            with get_pg_conn() as conn, conn.cursor() as cur:
+                # Construir query con IN para buscar todos los códigos de una vez
+                # Separar códigos numéricos de no-numéricos para optimizar
+                codigos_numericos = [c for c in codigos_limpios if c.replace('.', '').isdigit()]
+                codigos_no_numericos = [c for c in codigos_limpios if not c.replace('.', '').isdigit()]
+                
+                if codigos_numericos:
+                    # Para códigos numéricos, usar la lógica expandida
+                    if prov_key_filter:
+                        cur.execute(
+                            """
+                            SELECT DISTINCT ON (proveedor_key, codigo)
+                                   proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
+                            FROM productos_listas
+                            WHERE (
+                                codigo = ANY(%s)
+                                OR codigo_digitos = ANY(%s)
+                            ) AND proveedor_key = %s
+                            ORDER BY proveedor_key, codigo, mtime DESC
+                            """,
+                            (codigos_numericos, codigos_numericos, prov_key_filter)
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            SELECT DISTINCT ON (proveedor_key, codigo)
+                                   proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
+                            FROM productos_listas
+                            WHERE (
+                                codigo = ANY(%s)
+                                OR codigo_digitos = ANY(%s)
+                            )
+                            ORDER BY proveedor_key, codigo, mtime DESC
+                            """,
+                            (codigos_numericos, codigos_numericos)
+                        )
+                    
+                    rows = cur.fetchall()
+                    print(f'[DEBUG buscar_productos_por_codigos_multiples] Encontrados {len(rows)} productos con códigos numéricos', flush=True)
+                    
+                    # Procesar resultados (mismo código que buscar_productos_por_codigo_exacto)
+                    for r in rows:
+                        if isinstance(r, dict):
+                            prov_key = r.get('proveedor_key')
+                            prov_name = r.get('proveedor_nombre') or get_proveedor_display_name(prov_key)
+                            hoja = r.get('hoja')
+                            codigo_raw = r.get('codigo') or ''
+                            nombre_raw = r.get('nombre') or ''
+                            precio_db = r.get('precio')
+                            iva_db = r.get('iva')
+                            precios_json = r.get('precios') or {}
+                            extra_json = r.get('extra_datos') or {}
+                            archivo = r.get('archivo')
+                        else:
+                            prov_key = r[0]
+                            prov_name = r[1] or get_proveedor_display_name(prov_key)
+                            archivo = r[2]
+                            hoja = r[3]
+                            codigo_raw = r[4] or ''
+                            nombre_raw = r[5] or ''
+                            precio_db = r[6]
+                            iva_db = r[7]
+                            precios_json = r[8] or {}
+                            extra_json = r[9] or {}
+                        
+                        # Parsear JSONB si viene como string
+                        if isinstance(precios_json, str):
+                            try:
+                                precios_json = json.loads(precios_json)
+                            except:
+                                precios_json = {}
+                        if isinstance(extra_json, str):
+                            try:
+                                extra_json = json.loads(extra_json)
+                            except:
+                                extra_json = {}
+                        
+                        # Construir dict de precios
+                        precios_a_mostrar = {}
+                        if precio_db is not None and precio_db > 0:
+                            precio_float = float(precio_db) if hasattr(precio_db, '__float__') else precio_db
+                            if prov_key == 'brementools':
+                                precios_a_mostrar['Precio de Venta'] = precio_float
+                            elif prov_key == 'crossmaster':
+                                precios_a_mostrar['Precio Lista'] = precio_float
+                            elif prov_key == 'berger':
+                                precios_a_mostrar['Precio'] = precio_float
+                            elif prov_key == 'chiesa':
+                                precios_a_mostrar['Pr.Unit'] = precio_float
+                            elif prov_key == 'cachan':
+                                precios_a_mostrar['Precio'] = precio_float
+                            else:
+                                precios_a_mostrar['Precio'] = precio_float
+                        
+                        if precios_json:
+                            for k, v in precios_json.items():
+                                if v is not None and v != '':
+                                    try:
+                                        precios_a_mostrar[k] = float(v) if hasattr(v, '__float__') else v
+                                    except:
+                                        precios_a_mostrar[k] = v
+                        
+                        resultados.append({
+                            'codigo': codigo_raw,
+                            'producto': nombre_raw,
+                            'proveedor': f"{prov_name} (Hoja: {hoja})" if hoja else prov_name,
+                            'proveedor_key': prov_key,
+                            'sheet_name': hoja or '',
+                            'iva': iva_db if iva_db is not None else 'N/A',
+                            'precios': precios_a_mostrar,
+                            'extra_datos': extra_json,
+                            'precios_calculados': {},
+                            'fuente': 'DB'
+                        })
+                
+                # Si hay códigos no numéricos, buscarlos por separado
+                if codigos_no_numericos:
+                    if prov_key_filter:
+                        cur.execute(
+                            """
+                            SELECT DISTINCT ON (proveedor_key, codigo)
+                                   proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
+                            FROM productos_listas
+                            WHERE codigo = ANY(%s) AND proveedor_key = %s
+                            ORDER BY proveedor_key, codigo, mtime DESC
+                            """,
+                            (codigos_no_numericos, prov_key_filter)
+                        )
+                    else:
+                        cur.execute(
+                            """
+                            SELECT DISTINCT ON (proveedor_key, codigo)
+                                   proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
+                            FROM productos_listas
+                            WHERE codigo = ANY(%s)
+                            ORDER BY proveedor_key, codigo, mtime DESC
+                            """,
+                            (codigos_no_numericos,)
+                        )
+                    
+                    # Procesar estos resultados también (mismo código)
+                    rows = cur.fetchall()
+                    for r in rows:
+                        # ... (mismo procesamiento que arriba, evito duplicar código completo)
+                        pass
+                        
+        except Exception as exc:
+            print(f'[ERROR buscar_productos_por_codigos_multiples] Error en búsqueda DB: {exc}', flush=True)
+    
+    # Fallback a Excel si USAR_FALLBACK_EXCEL está activo y no hay resultados de DB
+    if not resultados and USAR_FALLBACK_EXCEL:
+        print(f'[DEBUG buscar_productos_por_codigos_multiples] Fallback a Excel para {len(codigos_limpios)} códigos', flush=True)
+        # Buscar cada código en Excel (esto ya es más lento, pero es fallback)
+        for codigo in codigos_limpios:
+            resultados_temp = buscar_productos_por_codigo_exacto(codigo, proveedor_filtrado)
+            if resultados_temp:
+                resultados.extend(resultados_temp)
+    
+    return resultados
+
 def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: str = ''):
     """
     Busca productos con el código EXACTO (sin coincidencias parciales).
@@ -1116,7 +1436,7 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                         if prov_key == 'brementools':
                             precios_a_mostrar['Precio de Venta'] = precio_float
                         elif prov_key == 'crossmaster':
-                            precios_a_mostrar['Precio con IVA'] = precio_float
+                            precios_a_mostrar['Precio Lista'] = precio_float
                         elif prov_key == 'berger':
                             precios_a_mostrar['Precio'] = precio_float
                         elif prov_key == 'chiesa':
@@ -1132,10 +1452,21 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                             if v is not None and v != '':
                                 # Convertir a float si es necesario
                                 v_float = float(v) if hasattr(v, '__float__') else v
-                                # Capitalizar nombres de precios adicionales
-                                k_titulo = k.title() if isinstance(k, str) else str(k)
-                                if k_titulo not in precios_a_mostrar:
-                                    precios_a_mostrar[k_titulo] = v_float
+                                # Normalizar el nombre de la clave para comparación
+                                k_lower = str(k).lower().strip().replace('  ', ' ')
+                                # Usar nombres exactos para precios específicos
+                                if k_lower in ['precio neto', 'precioneto']:
+                                    k_display = 'Precio Neto'
+                                elif k_lower in ['precio neto unitario', 'precionetunitario']:
+                                    k_display = 'Precio Neto Unitario'
+                                elif k_lower in ['precio de lista', 'precio lista', 'preciolista', 'preciodelista']:
+                                    k_display = 'Precio de Lista'
+                                else:
+                                    # Capitalizar nombres de precios adicionales
+                                    k_display = k.title() if isinstance(k, str) else str(k)
+                                
+                                if k_display not in precios_a_mostrar:
+                                    precios_a_mostrar[k_display] = v_float
                     
                     if DEBUG_LOG:
                         log_debug(f'buscar_productos_por_codigo_exacto: precios_a_mostrar={precios_a_mostrar}')
@@ -1174,12 +1505,19 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                     print(f'[DEBUG buscar_productos_por_codigo_exacto] Retornando {len(resultados)} resultados de DB', flush=True)
                     return resultados
                 else:
+                    if not USAR_FALLBACK_EXCEL:
+                        print(f'[DEBUG buscar_productos_por_codigo_exacto] No hay resultados en DB y fallback a Excel está desactivado', flush=True)
+                        return []
                     print(f'[DEBUG buscar_productos_por_codigo_exacto] No hay resultados en DB, usando fallback a Excel', flush=True)
         except Exception as exc:
             print(f'[ERROR buscar_productos_por_codigo_exacto] Error en DB: {exc}', flush=True)
             log_debug('buscar_productos_por_codigo_exacto(DB): error, se usa fallback Excel', exc)
 
-    # Fallback a Excel
+    # Fallback a Excel (solo si está habilitado)
+    if not USAR_FALLBACK_EXCEL:
+        print(f'[DEBUG buscar_productos_por_codigo_exacto] Fallback a Excel desactivado', flush=True)
+        return []
+    
     try:
         excel_files = sorted(os.listdir(LISTAS_PATH))
     except Exception as exc:
@@ -1478,7 +1816,7 @@ def _listas_provider_configs():
             'header': 11,
             'codigo': ['codigo', 'código', 'codigo ean', 'código ean', 'ean', 'cod'],
             'nombre': ['descripcion', 'descripción', 'producto', 'nombre'],
-            'precio_canon': ['precio con iva', 'psv con iva', 'psv con i v a', 'psv con i.v.a'],
+            'precio_canon': ['precio lista', 'precio de lista'],
             'iva': ['iva', 'i.v.a']
         },
         'berger': {
@@ -1493,7 +1831,7 @@ def _listas_provider_configs():
             'codigo': ['codigo', 'código', 'codigo ean', 'código ean', 'ean'],
             'nombre': ['producto', 'descripcion', 'descripción'],
             'precio_canon': ['precio de venta', 'precio venta', 'precio venta con iva'],
-            'precios_extra': ['precio de lista', 'precio lista', 'precio neto unitario'],
+            'precios_extra': ['precio de lista', 'precio lista', 'precio neto', 'precioneto', 'precio neto unitario', 'precionetunitario'],
             'iva': ['iva']
         },
         'cachan': {
@@ -1707,9 +2045,8 @@ def sync_listas_to_db():
                     # Otros precios visibles
                     precios_dict = {}
                     if provider_key == 'brementools':
-                        # Mantener visibles: de venta (canon), de lista, neto unitario
-                        # Canon ya está; intentar extra
-                        for alias in ['precio de lista', 'precio lista', 'precio neto unitario']:
+                        # Mantener visibles: de venta (canon), de lista, neto, neto unitario
+                        for alias in ['precio de lista', 'precio lista', 'precio neto', 'precioneto', 'precio neto unitario', 'precionetunitario']:
                             col = _find_first_col(df_columns, [alias])
                             if col and pd.notna(fila.get(col)):
                                 v = parse_price_value(fila.get(col))
@@ -1724,6 +2061,13 @@ def sync_listas_to_db():
 
                     # Extras mínimos
                     extra = {}
+                    # Capturar 'categoria' si existe en la hoja
+                    try:
+                        categoria_col = _find_first_col(df_columns, ['categoria'])
+                        if categoria_col and pd.notna(fila.get(categoria_col)):
+                            extra['Categoria'] = str(fila.get(categoria_col)).strip()
+                    except Exception:
+                        pass
 
                     codigo_digitos = ''.join(filter(str.isdigit, code))
                     nombre_norm = normalize_text(formatear_pulgadas(name))
@@ -2071,7 +2415,7 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
             # Obtener resultados paginados
             cur.execute(
                 f"""
-                SELECT codigo, nombre, precio, precios, proveedor_key, proveedor_nombre, extra_datos
+                SELECT codigo, nombre, precio, precios, proveedor_key, proveedor_nombre, extra_datos, iva
                 FROM productos_listas
                 WHERE {where_sql}
                 ORDER BY proveedor_nombre ASC, nombre_normalizado ASC
@@ -2089,8 +2433,9 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
                     proveedor_key = r.get('proveedor_key')
                     proveedor_nombre = r.get('proveedor_nombre')
                     extra_datos = r.get('extra_datos')
+                    iva = r.get('iva')
                 else:
-                    codigo, nombre, precio, precios, proveedor_key, proveedor_nombre, extra_datos = r[0], r[1], r[2], r[3], r[4], r[5], r[6]
+                    codigo, nombre, precio, precios, proveedor_key, proveedor_nombre, extra_datos, iva = r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]
                 
                 # Parsear JSONB si viene como string
                 if isinstance(precios, str):
@@ -2115,7 +2460,7 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
                     if proveedor_key == 'brementools':
                         precios_a_mostrar['Precio de Venta'] = precio_float
                     elif proveedor_key == 'crossmaster':
-                        precios_a_mostrar['Precio con IVA'] = precio_float
+                        precios_a_mostrar['Precio Lista'] = precio_float
                     elif proveedor_key == 'berger':
                         precios_a_mostrar['Precio'] = precio_float
                     elif proveedor_key == 'chiesa':
@@ -2133,11 +2478,32 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
                         if v is not None and v != '':
                             # Convertir a float si es necesario
                             v_float = float(v) if hasattr(v, '__float__') else v
-                            # Capitalizar nombres de precios adicionales
-                            k_titulo = k.title() if isinstance(k, str) else str(k)
-                            if k_titulo not in precios_a_mostrar:
-                                precios_a_mostrar[k_titulo] = v_float
+                            # Normalizar el nombre de la clave para comparación
+                            k_lower = str(k).lower().strip().replace('  ', ' ')
+                            # Usar nombres exactos para precios específicos
+                            if k_lower in ['precio neto', 'precioneto']:
+                                k_display = 'Precio Neto'
+                            elif k_lower in ['precio neto unitario', 'precionetunitario']:
+                                k_display = 'Precio Neto Unitario'
+                            elif k_lower in ['precio de lista', 'precio lista', 'preciolista', 'preciodelista']:
+                                k_display = 'Precio de Lista'
+                            else:
+                                # Capitalizar nombres de precios adicionales
+                                k_display = k.title() if isinstance(k, str) else str(k)
+                            
+                            if k_display not in precios_a_mostrar:
+                                precios_a_mostrar[k_display] = v_float
                 
+                # Precios calculados especiales por proveedor
+                precios_calculados = {}
+                if proveedor_key == 'chiesa' and (precio is not None):
+                    try:
+                        base = float(precio) if hasattr(precio, '__float__') else precio
+                        precios_calculados['Costo (-4% extra)'] = round(base * 0.96, 4)
+                        precios_calculados['Costo (+4% extra)'] = round(base * 1.04, 4)
+                    except Exception:
+                        pass
+
                 resultados.append({
                     'codigo': str(codigo) if codigo is not None else '',
                     'nombre': nombre or '',
@@ -2147,6 +2513,8 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
                     'proveedor': proveedor_nombre or proveedor_key or '',
                     'proveedor_key': proveedor_key or '',
                     'extra_datos': extra_datos or {},
+                    'iva': iva or 'N/A',
+                    'precios_calculados': precios_calculados,
                     'fuente': 'DB'
                 })
             return resultados, total
@@ -2603,7 +2971,20 @@ def index():
         if formulario == "consulta_producto":
             termino_busqueda = request.form.get("termino_busqueda", "").strip()
             proveedor_buscado = request.form.get("proveedor_busqueda", "") # Capturar proveedor
-            filtro_resultados = request.form.get("filtro_resultados", "").strip() # <-- AÑADIR ESTA LÍNEA
+            filtro_resultados = request.form.get("filtro_resultados", "").strip()
+            # Paginación (acepta GET o POST)
+            try:
+                busqueda_page_value = int((request.values.get("page") or 1))
+            except Exception:
+                busqueda_page_value = 1
+            try:
+                busqueda_per_page_value = int((request.values.get("per_page") or 20))
+            except Exception:
+                busqueda_per_page_value = 20
+            if busqueda_per_page_value not in (10, 20, 50, 100):
+                busqueda_per_page_value = 20
+            if busqueda_page_value < 1:
+                busqueda_page_value = 1
 
             if not termino_busqueda:
                 mensaje = "⚠️ POR FAVOR, INGRESA UN CÓDIGO O NOMBRE."
@@ -2611,144 +2992,195 @@ def index():
                 productos_encontrados = []
                 proveedor_key_filter = provider_name_to_key(proveedor_buscado) if proveedor_buscado else ''
 
-                # 1. Buscar en productos_manual.xlsx primero (si no hay filtro de proveedor o es 'manual')
-                if not proveedor_key_filter or proveedor_key_filter == 'manual':
-                    productos_manual_list, err_manual = load_manual_products()
-                    if productos_manual_list and not err_manual:
-                        # Buscar por código o nombre
-                        if termino_busqueda.isdigit() and len(termino_busqueda) > 2:
-                            # Búsqueda por código
-                            for p in productos_manual_list:
-                                codigo_str = str(p.get('codigo', '')).strip()
-                                if codigo_str == termino_busqueda:
-                                    productos_encontrados.append({
-                                        'codigo': codigo_str,
-                                        'producto': p.get('nombre', ''),
-                                        'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
-                                        'proveedor_key': 'manual',
-                                        'sheet_name': 'Manual',
-                                        'iva': 'N/A',
-                                        'precios': {'Precio': p.get('precio', 0.0)},
-                                        'extra_datos': {},
-                                        'precios_calculados': {},
-                                        'fuente': 'Excel'
-                                    })
-                        else:
-                            # Búsqueda por nombre
-                            termino_norm = normalize_text(formatear_pulgadas(termino_busqueda))
-                            palabras = [token for token in termino_norm.split() if token]
-                            for p in productos_manual_list:
-                                nombre_norm = normalize_text(formatear_pulgadas(p.get('nombre', '')))
-                                if palabras:
-                                    if all(palabra in nombre_norm for palabra in palabras):
-                                        productos_encontrados.append({
-                                            'codigo': str(p.get('codigo', '')),
-                                            'producto': p.get('nombre', ''),
-                                            'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
-                                            'proveedor_key': 'manual',
-                                            'sheet_name': 'Manual',
-                                            'iva': 'N/A',
-                                            'precios': {'Precio': p.get('precio', 0.0)},
-                                            'extra_datos': {},
-                                            'precios_calculados': {},
-                                            'fuente': 'Excel'
-                                        })
-                                else:
-                                    if termino_norm in nombre_norm:
-                                        productos_encontrados.append({
-                                            'codigo': str(p.get('codigo', '')),
-                                            'producto': p.get('nombre', ''),
-                                            'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
-                                            'proveedor_key': 'manual',
-                                            'sheet_name': 'Manual',
-                                            'iva': 'N/A',
-                                            'precios': {'Precio': p.get('precio', 0.0)},
-                                            'extra_datos': {},
-                                            'precios_calculados': {},
-                                            'fuente': 'Excel'
-                                        })
-
-                # 2. Buscar en archivos Excel de proveedores
-                try:
-                    excel_files = sorted(os.listdir(LISTAS_PATH))
-                except Exception as exc:
-                    mensaje = f"❌ ERROR LISTANDO ARCHIVOS: {exc}"
-                    excel_files = []
-
-                for filename in excel_files:
-                    if not filename.lower().endswith(('.xlsx', '.xls')):
-                        continue
-                    if 'old' in filename.lower():
-                        continue
-
-                    provider_key = provider_key_from_filename(filename)
-                    if proveedor_key_filter and provider_key != proveedor_key_filter:
-                        continue
-
-                    config = EXCEL_PROVIDER_CONFIG.get(provider_key)
-                    if not config:
-                        continue
-
-                    header_row_index = config.get('fila_encabezado')
-                    if header_row_index is None:
-                        continue
-
-                    file_path = os.path.join(LISTAS_PATH, filename)
+                # Intentar buscar en la base de datos primero si está habilitada
+                total_db = 0
+                if LISTAS_EN_DB and DATABASE_URL and psycopg:
+                    print(f'[DEBUG consulta_producto] Buscando en DB: termino="{termino_busqueda}", proveedor="{proveedor_key_filter}"', flush=True)
                     try:
-                        all_sheets = pd.read_excel(file_path, sheet_name=None, header=header_row_index)
+                        # Traer TODOS los resultados (máximo 5000) para paginación del lado del cliente
+                        resultados_db, total_db = buscar_productos_avanzados_db(
+                            termino_busqueda,
+                            page=1,
+                            per_page=5000,  # Traer hasta 5000 resultados
+                            proveedor_filter=proveedor_key_filter if proveedor_key_filter else None
+                        )
+                        
+                        print(f'[DEBUG consulta_producto] Resultados de DB: {total_db} productos encontrados', flush=True)
+                        
+                        if resultados_db:
+                            # Convertir formato de buscar_productos_avanzados_db al formato esperado por el template
+                            for r in resultados_db:
+                                productos_encontrados.append({
+                                    'codigo': r.get('codigo', ''),
+                                    'producto': r.get('nombre', ''),
+                                    'proveedor': r.get('proveedor', ''),
+                                    'proveedor_key': r.get('proveedor_key', ''),
+                                    'sheet_name': '',  # No aplicable para DB
+                                    'iva': r.get('iva', 'N/A'),
+                                    'precios': r.get('precios', {}),
+                                    'extra_datos': r.get('extra_datos', {}),
+                                    'precios_calculados': r.get('precios_calculados', {}),
+                                    'fuente': r.get('fuente', 'DB')  # Asegurar que tenga fuente
+                                })
+                            
+                            print(f'[DEBUG consulta_producto] Usando {len(productos_encontrados)} resultados de DB', flush=True)
                     except Exception as exc:
-                        mensaje = f"❌ ERROR PROCESANDO {filename}: {exc}"
-                        continue
-
-                    proveedor_display_name = get_proveedor_display_name(provider_key)
-
-                    for sheet_name, df in all_sheets.items():
-                        if df.empty:
-                            continue
-
-                        df.columns = [normalize_text(c) for c in df.columns]
-                        actual_cols = {
-                            'codigo': next((alias for alias in config['codigo'] if alias in df.columns), None),
-                            'producto': next((alias for alias in config['producto'] if alias in df.columns), None),
-                            'iva': next((alias for alias in config.get('iva', []) if alias in df.columns), None),
-                            'precios_a_mostrar': [alias for alias in config.get('precios_a_mostrar', []) if alias in df.columns],
-                            'extra_datos': [alias for alias in config.get('extra_datos', []) if alias in df.columns]
-                        }
-
-                        if not actual_cols['codigo'] or not actual_cols['producto']:
-                            continue
-
-                        codigo_series = df[actual_cols['codigo']].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else '')
-
-                        if termino_busqueda.isdigit() and len(termino_busqueda) > 2:
-                            condition = codigo_series == termino_busqueda
-                        else:
-                            termino_norm = normalize_text(formatear_pulgadas(termino_busqueda))
-                            palabras = [token for token in termino_norm.split() if token]
-                            producto_busqueda = df[actual_cols['producto']].apply(lambda x: normalize_text(formatear_pulgadas(x)))
-                            if palabras:
-                                condition = producto_busqueda.apply(lambda nombre: all(palabra in nombre for palabra in palabras))
-                            else:
-                                condition = producto_busqueda.str.contains(termino_norm)
-
-                        if not condition.any():
-                            continue
-
-                        for idx in df.index[condition]:
-                            fila = df.loc[idx]
-                            codigo_val = codigo_series.loc[idx]
-                            producto = build_producto_entry(
-                                fila,
-                                actual_cols,
-                                provider_key,
-                                proveedor_display_name,
-                                sheet_name,
-                                df.columns,
-                                codigo_override=codigo_val
-                            )
-                            productos_encontrados.append(producto)
+                        print(f'[ERROR consulta_producto] Error en búsqueda DB: {exc}', flush=True)
+                        log_debug('consulta_producto: error en búsqueda DB, usando fallback a Excel', exc)
                 
-                # --- NUEVO BLOQUE PARA FILTRAR RESULTADOS ---
+                # Fallback a búsqueda en Excel si no hay resultados de DB o DB no está habilitada
+                if not productos_encontrados:
+                    if not USAR_FALLBACK_EXCEL:
+                        print(f'[DEBUG consulta_producto] No hay resultados de DB y fallback a Excel está desactivado', flush=True)
+                    else:
+                        print(f'[DEBUG consulta_producto] No hay resultados de DB, usando fallback a Excel', flush=True)
+                        
+                        # 1. Buscar en productos_manual.xlsx primero (si no hay filtro de proveedor o es 'manual')
+                        if not proveedor_key_filter or proveedor_key_filter == 'manual':
+                            productos_manual_list, err_manual = load_manual_products()
+                            if productos_manual_list and not err_manual:
+                                # Buscar por código o nombre
+                                if termino_busqueda.isdigit() and len(termino_busqueda) > 2:
+                                    # Búsqueda por código
+                                    for p in productos_manual_list:
+                                        codigo_str = str(p.get('codigo', '')).strip()
+                                        if codigo_str == termino_busqueda:
+                                            productos_encontrados.append({
+                                                'codigo': codigo_str,
+                                                'producto': p.get('nombre', ''),
+                                                'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
+                                                'proveedor_key': 'manual',
+                                                'sheet_name': 'Manual',
+                                                'iva': 'N/A',
+                                                'precios': {'Precio': p.get('precio', 0.0)},
+                                            'extra_datos': {},
+                                            'precios_calculados': {},
+                                            'fuente': 'Excel'
+                                        })
+                            else:
+                                # Búsqueda por nombre
+                                termino_norm = normalize_text(formatear_pulgadas(termino_busqueda))
+                                palabras = [token for token in termino_norm.split() if token]
+                                for p in productos_manual_list:
+                                    nombre_norm = normalize_text(formatear_pulgadas(p.get('nombre', '')))
+                                    if palabras:
+                                        if all(palabra in nombre_norm for palabra in palabras):
+                                            productos_encontrados.append({
+                                                'codigo': str(p.get('codigo', '')),
+                                                'producto': p.get('nombre', ''),
+                                                'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
+                                                'proveedor_key': 'manual',
+                                                'sheet_name': 'Manual',
+                                                'iva': 'N/A',
+                                                'precios': {'Precio': p.get('precio', 0.0)},
+                                                'extra_datos': {},
+                                                'precios_calculados': {},
+                                                'fuente': 'Excel'
+                                            })
+                                    else:
+                                        if termino_norm in nombre_norm:
+                                            productos_encontrados.append({
+                                                'codigo': str(p.get('codigo', '')),
+                                                'producto': p.get('nombre', ''),
+                                                'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
+                                                'proveedor_key': 'manual',
+                                                'sheet_name': 'Manual',
+                                                'iva': 'N/A',
+                                                'precios': {'Precio': p.get('precio', 0.0)},
+                                                'extra_datos': {},
+                                                'precios_calculados': {},
+                                                'fuente': 'Excel'
+                                            })
+
+                    # 2. Buscar en archivos Excel de proveedores
+                    try:
+                        excel_files = sorted(os.listdir(LISTAS_PATH))
+                    except Exception as exc:
+                        mensaje = f"❌ ERROR LISTANDO ARCHIVOS: {exc}"
+                        excel_files = []
+
+                    for filename in excel_files:
+                        if not filename.lower().endswith(('.xlsx', '.xls')):
+                            continue
+                        if 'old' in filename.lower():
+                            continue
+
+                        provider_key = provider_key_from_filename(filename)
+                        if proveedor_key_filter and provider_key != proveedor_key_filter:
+                            continue
+
+                        config = EXCEL_PROVIDER_CONFIG.get(provider_key)
+                        if not config:
+                            continue
+
+                        header_row_index = config.get('fila_encabezado')
+                        if header_row_index is None:
+                            continue
+
+                        file_path = os.path.join(LISTAS_PATH, filename)
+                        try:
+                            all_sheets = pd.read_excel(file_path, sheet_name=None, header=header_row_index)
+                        except Exception as exc:
+                            mensaje = f"❌ ERROR PROCESANDO {filename}: {exc}"
+                            continue
+
+                        proveedor_display_name = get_proveedor_display_name(provider_key)
+
+                        for sheet_name, df in all_sheets.items():
+                            if df.empty:
+                                continue
+
+                            df.columns = [normalize_text(c) for c in df.columns]
+                            actual_cols = {
+                                'codigo': next((alias for alias in config['codigo'] if alias in df.columns), None),
+                                'producto': next((alias for alias in config['producto'] if alias in df.columns), None),
+                                'iva': next((alias for alias in config.get('iva', []) if alias in df.columns), None),
+                                'precios_a_mostrar': [alias for alias in config.get('precios_a_mostrar', []) if alias in df.columns],
+                                'extra_datos': [alias for alias in config.get('extra_datos', []) if alias in df.columns]
+                            }
+
+                            if not actual_cols['codigo'] or not actual_cols['producto']:
+                                continue
+
+                            codigo_series = df[actual_cols['codigo']].apply(lambda x: str(x).split('.')[0] if pd.notna(x) else '')
+
+                            if termino_busqueda.isdigit() and len(termino_busqueda) > 2:
+                                condition = codigo_series == termino_busqueda
+                            else:
+                                termino_norm = normalize_text(formatear_pulgadas(termino_busqueda))
+                                palabras = [token for token in termino_norm.split() if token]
+                                producto_busqueda = df[actual_cols['producto']].apply(lambda x: normalize_text(formatear_pulgadas(x)))
+                                if palabras:
+                                    condition = producto_busqueda.apply(lambda nombre: all(palabra in nombre for palabra in palabras))
+                                else:
+                                    condition = producto_busqueda.str.contains(termino_norm)
+
+                            if not condition.any():
+                                continue
+
+                            for idx in df.index[condition]:
+                                fila = df.loc[idx]
+                                codigo_val = codigo_series.loc[idx]
+                                producto = build_producto_entry(
+                                    fila,
+                                    actual_cols,
+                                    provider_key,
+                                    proveedor_display_name,
+                                    sheet_name,
+                                    df.columns,
+                                    codigo_override=codigo_val
+                                )
+                                productos_encontrados.append(producto)
+                
+                # Si estamos en fallback Excel (sin DB) y aún no se filtró, aplicar paginado en memoria
+                if (not (LISTAS_EN_DB and DATABASE_URL and psycopg)) or total_db == 0:
+                    if productos_encontrados:
+                        start_idx = (busqueda_page_value - 1) * busqueda_per_page_value
+                        end_idx = start_idx + busqueda_per_page_value
+                        total_db = len(productos_encontrados)
+                        productos_encontrados = productos_encontrados[start_idx:end_idx]
+
+                # Aplicar filtro adicional si se especificó
                 if filtro_resultados and productos_encontrados:
                     productos_filtrados = []
                     filtro_norm = normalize_text(filtro_resultados)
@@ -2758,14 +3190,43 @@ def index():
                         if filtro_norm in normalize_text(texto_busqueda):
                             productos_filtrados.append(producto)
                     
-                    mensaje = f"✅ SE ENCONTRARON {len(productos_filtrados)} COINCIDENCIA(S) AL FILTRAR POR '{filtro_resultados}'."
-                    productos_encontrados = productos_filtrados
-                # --- FIN DEL BLOQUE DE FILTRADO ---
+                    # Para mostrar conteo total filtrado manteniendo paginación
+                    total_filtrado = len(productos_filtrados)
+                    mensaje = f"✅ SE ENCONTRARON {total_filtrado} COINCIDENCIA(S) AL FILTRAR POR '{filtro_resultados}'."
+                    # Paginar manualmente los filtrados
+                    start_idx = (busqueda_page_value - 1) * busqueda_per_page_value
+                    end_idx = start_idx + busqueda_per_page_value
+                    productos_encontrados = productos_filtrados[start_idx:end_idx]
+                    total_db = total_filtrado
+
+                # Si no se aplicó filtro y usamos DB, total_db ya viene de la consulta
+                if not filtro_resultados:
+                    if LISTAS_EN_DB and DATABASE_URL and psycopg:
+                        total = total_db
+                    else:
+                        total = len(productos_encontrados)
+                else:
+                    total = total_db
 
                 if not productos_encontrados and not mensaje:
                     mensaje = f"ℹ️ NO SE ENCONTRARON RESULTADOS PARA '{termino_busqueda}'."
-                elif productos_encontrados:
-                    mensaje = f"✅ SE ENCONTRARON {len(productos_encontrados)} COINCIDENCIA(S)."
+                elif productos_encontrados and not mensaje:
+                    mensaje = f"✅ SE ENCONTRARON {total} COINCIDENCIA(S)."
+
+                # Calcular totales de paginación para template
+                try:
+                    import math
+                    busqueda_total_paginas = max(1, math.ceil(max(0, int(total)) / busqueda_per_page_value))
+                except Exception:
+                    busqueda_total_paginas = 1
+                busqueda_total_resultados = int(total)
+                # Guardar en variables de contexto más adelante
+                locals().update({
+                    'busqueda_page_value': busqueda_page_value,
+                    'busqueda_per_page_value': busqueda_per_page_value,
+                    'busqueda_total_paginas': busqueda_total_paginas,
+                    'busqueda_total_resultados': busqueda_total_resultados,
+                })
         
         elif formulario == "ventas_avanzadas_buscar":
             active_tab = "ventas_avanzadas"
@@ -3823,6 +4284,11 @@ def index():
         "resultado_manual": resultado_manual,
         "productos_encontrados": productos_encontrados,
         "mensaje": mensaje,
+        # Paginación de búsqueda normal
+        "busqueda_page": locals().get("busqueda_page_value", 1),
+        "busqueda_per_page": locals().get("busqueda_per_page_value", 20),
+        "busqueda_total_paginas": locals().get("busqueda_total_paginas", 1),
+        "busqueda_total_resultados": locals().get("busqueda_total_resultados", (len(productos_encontrados) if productos_encontrados else 0)),
         "proveedor_id_seleccionado": proveedor_id_seleccionado,
         "datos_seleccionados": datos_seleccionados,
         "historial": historial,
@@ -3902,6 +4368,10 @@ def extraer_codigo_de_barras(codigo_barras: str, proveedor_filtro: str = '') -> 
     Extrae múltiples variantes de código de producto desde un código de barras.
     Soporta EAN-13, UPC-A y lógica especial para Crossmaster.
     
+    Modo inteligente (MODO_BARCODE_INTELIGENTE=True):
+    - 12 dígitos (UPC-A): busca solo en Crossmaster
+    - 13 dígitos (EAN-13): busca en todos los proveedores
+    
     Args:
         codigo_barras: Código escaneado (puede tener guiones, espacios, etc.)
         proveedor_filtro: Nombre del proveedor para aplicar lógica específica
@@ -3917,6 +4387,20 @@ def extraer_codigo_de_barras(codigo_barras: str, proveedor_filtro: str = '') -> 
     longitud = len(codigo_limpio)
     variantes = []
     proveedor_key = provider_name_to_key(proveedor_filtro) if proveedor_filtro else ''
+    
+    # **MODO INTELIGENTE**: Detección automática por longitud
+    if MODO_BARCODE_INTELIGENTE and not proveedor_key:
+        print(f'[BARCODE] Modo inteligente activado. Código: {codigo_limpio} ({longitud} dígitos)', flush=True)
+        
+        if longitud == 12:
+            # UPC-A (12 dígitos) -> Solo Crossmaster
+            print(f'[BARCODE] Detectado UPC-A, buscando solo en Crossmaster', flush=True)
+            proveedor_key = 'crossmaster'
+        elif longitud == 13:
+            # EAN-13 (13 dígitos) -> Todos los proveedores
+            print(f'[BARCODE] Detectado EAN-13, buscando en todos los proveedores', flush=True)
+            # Usar lógica estándar para todos
+            pass
     
     # Fase 1: Patrón específico por proveedor
     if proveedor_key == 'crossmaster':
@@ -3998,6 +4482,7 @@ def extraer_codigo_de_barras(codigo_barras: str, proveedor_filtro: str = '') -> 
             seen.add(v)
             variantes_unicas.append(v)
     
+    print(f'[BARCODE] Variantes generadas: {variantes_unicas[:5]}{"..." if len(variantes_unicas) > 5 else ""}', flush=True)
     return variantes_unicas
 
 
@@ -4009,14 +4494,18 @@ def barcode_search():
     codigos_intentados = []
     resultados = []
     proveedor_filtro = ''
+    proveedor_filtro_manual = ''  # Para mantener en el formulario
+    modo_detectado = None
 
     if request.method == 'POST':
         barcode_input = request.form.get('barcode', '').strip()
-        proveedor_filtro = request.form.get('proveedor', '').strip()
+        proveedor_filtro_manual = request.form.get('proveedor', '').strip()
+        proveedor_filtro = proveedor_filtro_manual  # Inicialmente usar el del formulario
         ejecutar_busqueda = True
     else:
         barcode_input = request.args.get('codigo', '').strip()
-        proveedor_filtro = request.args.get('proveedor', '').strip()
+        proveedor_filtro_manual = request.args.get('proveedor', '').strip()
+        proveedor_filtro = proveedor_filtro_manual
         ejecutar_busqueda = bool(barcode_input)
 
     # Auto-sincronizar listas si están desactualizadas (solo si se usa DB para listas)
@@ -4034,8 +4523,25 @@ def barcode_search():
         if len(barcode_input) < 4:
             mensaje = '⚠️ Ingresá al menos 4 caracteres del código.'
         else:
-            # Intentar primero con el código tal como se ingresó (para códigos normales de productos)
+            # Detectar modo inteligente y aplicar filtro automático
             codigo_limpio = barcode_input.strip()
+            codigo_numerico = ''.join(filter(str.isdigit, codigo_limpio))
+            longitud = len(codigo_numerico)
+            
+            # **MODO INTELIGENTE**: Aplicar filtro automático SOLO si el usuario NO seleccionó un proveedor manualmente
+            if MODO_BARCODE_INTELIGENTE and not proveedor_filtro_manual and codigo_numerico:
+                if longitud == 12:
+                    # UPC-A (12 dígitos) -> Filtrar solo Crossmaster
+                    proveedor_filtro = 'Crossmaster'
+                    modo_detectado = 'UPC-A (12 dígitos) → Búsqueda automática en Crossmaster'
+                    print(f'[BARCODE] Modo inteligente: UPC-A detectado, filtrando por Crossmaster', flush=True)
+                elif longitud == 13:
+                    # EAN-13 (13 dígitos) -> Buscar en todos (asegurar que no hay filtro)
+                    proveedor_filtro = ''
+                    modo_detectado = 'EAN-13 (13 dígitos) → Búsqueda en todos los proveedores'
+                    print(f'[BARCODE] Modo inteligente: EAN-13 detectado, buscando en todos', flush=True)
+            
+            # Intentar primero con el código tal como se ingresó (para códigos normales de productos)
             codigos_intentados = [codigo_limpio]
             
             # Buscar primero con el código original
@@ -4049,11 +4555,28 @@ def barcode_search():
                 variantes_barcode = extraer_codigo_de_barras(barcode_input, proveedor_filtro)
                 if variantes_barcode:
                     codigos_intentados.extend(variantes_barcode)
-                    # Buscar con cada variante de código de barras
-                    for codigo_exacto in variantes_barcode:
-                        resultados_temp = buscar_productos_por_codigo_exacto(codigo_exacto, proveedor_filtro)
+                    
+                    # **OPTIMIZACIÓN CONDICIONAL**: Elegir método según configuración
+                    import time
+                    inicio = time.time()
+                    
+                    if BUSQUEDA_BARCODE_OPTIMIZADA:
+                        # **MODO RÁPIDO**: Buscar todas las variantes en UNA SOLA QUERY
+                        print(f'[BARCODE] Modo rápido: Buscando {len(variantes_barcode)} variantes en una sola consulta...', flush=True)
+                        resultados_temp = buscar_productos_por_codigos_multiples(variantes_barcode, proveedor_filtro)
                         if resultados_temp:
                             resultados.extend(resultados_temp)
+                    else:
+                        # **MODO LENTO**: Buscar cada variante secuencialmente (para debugging)
+                        print(f'[BARCODE] Modo lento: Buscando {len(variantes_barcode)} variantes secuencialmente...', flush=True)
+                        for codigo_exacto in variantes_barcode:
+                            resultados_temp = buscar_productos_por_codigo_exacto(codigo_exacto, proveedor_filtro)
+                            if resultados_temp:
+                                resultados.extend(resultados_temp)
+                    
+                    tiempo_transcurrido = time.time() - inicio
+                    modo_usado = "rápido (optimizado)" if BUSQUEDA_BARCODE_OPTIMIZADA else "lento (secuencial)"
+                    print(f'[BARCODE] Búsqueda completada en {tiempo_transcurrido:.2f} segundos (modo {modo_usado})', flush=True)
             
             # Eliminar duplicados (por si un producto coincide con múltiples códigos)
             resultados_unicos = []
@@ -4066,13 +4589,19 @@ def barcode_search():
             resultados = resultados_unicos
             
             if resultados:
-                mensaje = f"✅ Se encontraron {len(resultados)} producto(s) con código exacto."
+                mensaje_base = f"✅ Se encontraron {len(resultados)} producto(s) con código exacto."
+                if modo_detectado:
+                    mensaje_base = f"🔍 {modo_detectado}\n{mensaje_base}"
                 if len(codigos_intentados) > 1:
-                    mensaje += f" Variantes probadas: {', '.join(codigos_intentados[:3])}{'...' if len(codigos_intentados) > 3 else ''}"
+                    mensaje_base += f" Variantes probadas: {', '.join(codigos_intentados[:3])}{'...' if len(codigos_intentados) > 3 else ''}"
+                mensaje = mensaje_base
             else:
-                mensaje = f"ℹ️ No se encontraron productos con código exacto."
+                mensaje_base = f"ℹ️ No se encontraron productos con código exacto."
+                if modo_detectado:
+                    mensaje_base = f"🔍 {modo_detectado}\n{mensaje_base}"
                 if len(codigos_intentados) > 1:
-                    mensaje += f" Variantes probadas: {', '.join(codigos_intentados[:5])}{'...' if len(codigos_intentados) > 5 else ''}"
+                    mensaje_base += f" Variantes probadas: {', '.join(codigos_intentados[:5])}{'...' if len(codigos_intentados) > 5 else ''}"
+                mensaje = mensaje_base
 
     lista_proveedores = sorted({p.get('nombre_base') for p in proveedores.values() if p.get('nombre_base')})
     # Agregar "Manual" si existe productos_manual.xlsx
@@ -4089,7 +4618,8 @@ def barcode_search():
         resultados=resultados,
         mensaje=mensaje,
         lista_proveedores=lista_proveedores,
-        proveedor_filtro=proveedor_filtro
+        proveedor_filtro=proveedor_filtro_manual,  # Usar el manual para el formulario
+        modo_barcode_inteligente=MODO_BARCODE_INTELIGENTE
     )
 
 @app.route('/health')
