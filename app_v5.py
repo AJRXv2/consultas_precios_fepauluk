@@ -1942,8 +1942,6 @@ def sync_listas_to_db():
         return {'error': 'PostgreSQL no disponible.'}
     print(f"[DEBUG sync_listas_to_db] PostgreSQL disponible, LISTAS_PATH={LISTAS_PATH}")
 
-    print(f"[DEBUG sync_listas_to_db] PostgreSQL disponible, LISTAS_PATH={LISTAS_PATH}")
-
     prov_cfg = _listas_provider_configs()
     try:
         excel_files = sorted(f for f in os.listdir(LISTAS_PATH) if f.lower().endswith(('.xlsx', '.xls')) and 'old' not in f.lower())
@@ -1969,7 +1967,6 @@ def sync_listas_to_db():
             print(f"[DEBUG sync_listas_to_db] Limpieza: {len(archivos_obsoletos)} archivo(s) obsoletos eliminados de la DB: {archivos_obsoletos}")
     except Exception as exc:
         print(f"[WARN sync_listas_to_db] No se pudieron limpiar archivos obsoletos de la DB: {exc}")
-
     print("[DEBUG sync_listas_to_db] Obteniendo conexión PostgreSQL...")
     with get_pg_conn() as conn, conn.cursor() as cur:
         print("[DEBUG sync_listas_to_db] Conexión obtenida, iniciando procesamiento de archivos...")
@@ -2148,7 +2145,6 @@ def sync_listas_to_db():
                             extra['Categoria'] = str(fila.get(categoria_col)).strip()
                     except Exception:
                         pass
-
                     # Capturar cantidad (BremenTools)
                     if provider_key == 'brementools' and cantidad_col:
                         try:
@@ -2167,7 +2163,6 @@ def sync_listas_to_db():
                                     extra['Cantidad'] = qty_val
                         except Exception:
                             pass
-
                     codigo_digitos = ''.join(filter(str.isdigit, code))
                     nombre_norm = normalize_text(formatear_pulgadas(name))
                     codigo_norm = normalize_text(code)
@@ -4173,7 +4168,6 @@ def index():
                 mensaje = "✅ TODO EL HISTORIAL BORRADO."
             except Exception as e:
                 mensaje = f"❌ ERROR BORRANDO TODO EL HISTORIAL: {e}"
-
         elif formulario == "borrar_todas_listas":
             active_tab = "gestion"
             try:
@@ -4186,7 +4180,6 @@ def index():
                             archivos_borrados += 1
                         except Exception as exc:
                             log_debug("borrar_todas_listas: error eliminando archivo", fname, exc)
-
                 productos_borrados = None
                 batches_borrados = None
                 db_error = None
@@ -4215,7 +4208,6 @@ def index():
                     mensaje = f"✅ Archivos Excel borrados: {archivos_borrados}. (DB de listas no configurada)"
             except Exception as e:
                 mensaje = f"❌ ERROR BORRANDO LISTAS: {e}"
-
         elif formulario == "borrar_listas_old":
             # Eliminar todos los archivos con OLD en el nombre (sin tocar vigentes)
             try:
