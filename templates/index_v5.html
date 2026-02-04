@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-gray-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Calculadora de Precios Ferreteria Pauluk</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .tab-content.hidden { display: none; }
+    </style>
+</head>
+<body class="h-full">
+    <div class="min-h-full">
+        <div class="bg-gray-800 pb-32">
+            <header class="py-6">
+                <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                    <div>
+                        <h1 class="text-3xl font-bold tracking-tight text-white">Calculadora y Consulta de Precios</h1>
+                        <p class="text-gray-400 mt-1">Ferretería Pauluk</p>
+                    </div>
+                    <div class="flex items-center gap-4 text-sm">
+                        {% if request.current_user %}
+                            <span class="text-gray-300">👤 {{ request.current_user }}</span>
+                            <a href="/cambiar_credenciales" class="text-indigo-200 hover:text-white underline">Credenciales</a>
+                            <a href="/logout" class="text-red-300 hover:text-red-200 underline">Salir</a>
+                        {% else %}
+                            <a href="/login" class="text-indigo-200 hover:text-white underline">Iniciar Sesión</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </header>
+        </div>
+
+        <main class="-mt-32">
+            <div class="mx-auto max-w-7xl px-4 pb-12 sm:px-6 lg:px-8">
+                <div class="bg-white rounded-lg shadow px-5 py-6 sm:px-6">
+                    
+                    <div class="border-b border-gray-200">
+                        <nav class="-mb-px flex space-x-8" aria-label="Tabs">
+                            <a href="#" onclick="showTab('busqueda')" id="tab-busqueda" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">Búsqueda</a>
+                            <a href="#" onclick="showTab('calculos')" id="tab-calculos" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">Cálculos</a>
+                            <a href="#" onclick="showTab('gestion')" id="tab-gestion" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">Gestión</a>
+                            <a href="#" onclick="showTab('ventas_avanzadas')" id="tab-ventas_avanzadas" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">Ventas Avanzadas</a>
+                            <a href="#" onclick="showTab('historial')" id="tab-historial" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">Historial</a>
+                            <a href="/configuracion" class="border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700 whitespace-nowrap border-b-2 py-4 px-1 text-sm font-medium">⚙️ Configuración</a>
+                        </nav>
+                    </div>
+
+                    {% if mensaje %}
+                        <div class="mt-6 rounded-md bg-yellow-50 p-4">
+                            <div class="flex"><div class="ml-3"><p class="text-sm font-medium text-yellow-800">{{ mensaje }}</p></div></div>
+                        </div>
+                    {% endif %}
+
+                    <div class="mt-6">
+                        <!-- Pestaña de Búsqueda de Productos -->
+                        <div id="content-busqueda" class="tab-content hidden">
+                            <div class="card">
+                                <h2 class="text-xl font-semibold text-gray-900 mb-4">Búsqueda de Productos en Listas Excel</h2>
+                                <form id="form-busqueda" method="POST" action="/">
+                                    <input type="hidden" name="formulario" value="consulta_producto">
+                                    <input type="hidden" class="active_tab_input" name="active_tab" value="busqueda">
+                                    <input type="hidden" id="page_input" name="page" value="{{ busqueda_page or 1 }}">
+                                    
+                                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
+                                        <!-- Campo para Código o Nombre -->
+                                        <div class="md:col-span-2">
+                                            <label for="termino_busqueda" class="block text-sm font-medium text-gray-700">Código o Nombre del Producto:</label>
+                                            <input type="text" id="termino_busqueda" name="termino_busqueda" value="{{ request.form.get('termino_busqueda', '') }}" placeholder="Ej: 12345 o 'destornillador'" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        </div>
+                                        
+                                        <!-- Dropdown para Proveedor -->
+                                        <div>
+                                            <label for="proveedor_busqueda" class="block text-sm font-medium text-gray-700">Proveedor (Opcional):</label>
+                                            <select id="proveedor_busqueda" name="proveedor_busqueda" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                                <option value="">-- Todos los Proveedores --</option>
+                                                {% for nombre_prov in lista_nombres_proveedores %}
+                                                    <option value="{{ nombre_prov }}" {% if nombre_prov == proveedor_buscado %}selected{% endif %}>
+                                                        {{ nombre_prov }}
+                                                    </option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-4 flex flex-col sm:flex-row gap-2 items-end">
+                                        <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Buscar Producto</button>
+                                        <button type="button" data-url="{{ url_for('barcode_search') }}" onclick="window.open(this.dataset.url, '_blank', 'width=1200,height=800');" class="inline-flex justify-center rounded-md border border-transparent bg-amber-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-amber-700">Buscar por Código de Barras</button>
+                                        <div class="sm:ml-auto">
+                                            <label for="per_page" class="block text-xs font-medium text-gray-700">Resultados por página</label>
+                                            <select id="per_page" name="per_page" class="mt-1 block w-32 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" onchange="document.getElementById('page_input').value=1; document.getElementById('form-busqueda').submit();">
+                                                {% for n in [10,20,50,100] %}
+                                                <option value="{{ n }}" {% if (busqueda_per_page or 20) == n %}selected{% endif %}>{{ n }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    {# --- NUEVO CAMPO DE FILTRO --- #}
+                                    {% if productos_encontrados is not none %}
+                                    <div class="mt-6 border-t pt-4">
+                                        <label for="filtro_resultados" class="block text-sm font-medium text-gray-700">Filtrar resultados por palabra clave:</label>
+                                        <div class="flex items-center space-x-2">
+                                            <input type="text" id="filtro_resultados" name="filtro_resultados" value="{{ filtro_resultados or '' }}" placeholder="Ej: phillips, 1/2, bahco" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                            <button type="submit" onclick="document.getElementById('page_input').value=1;" class="mt-1 inline-flex justify-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700">Filtrar</button>
+                                        </div>
+                                    </div>
+                                    {% endif %}
+                                    {# --- FIN DEL NUEVO CAMPO --- #}
+                                </form>
+
+                                {% if productos_encontrados is not none %}
+                                    <h3 class="mt-8 text-lg font-medium text-gray-900">Resultados de la Búsqueda</h3>
+                                    <!-- Paginación superior -->
+                                    <div id="pagination-top" class="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                        <div class="text-sm text-gray-700">
+                                            <span>Página <strong id="current-page-top">1</strong> de <strong id="total-pages-top">1</strong></span>
+                                            <span class="mx-2">•</span>
+                                            <span>Mostrando <strong id="start-idx-top">1</strong>–<strong id="end-idx-top">20</strong> de <strong id="total-results">{{ productos_encontrados|length }}</strong></span>
+                                        </div>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <button type="button" id="btn-first-top" onclick="clientPagination.goToFirstPage()" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50" title="Ir al principio">⏮ Inicio</button>
+                                            <button type="button" id="btn-prev5-top" onclick="clientPagination.goToPreviousPages(5)" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50" title="Retroceder 5 páginas">⏪ -5</button>
+                                            <button type="button" id="btn-prev-top" onclick="clientPagination.goToPreviousPage()" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50">« Anterior</button>
+                                            <button type="button" id="btn-next-top" onclick="clientPagination.goToNextPage()" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50">Siguiente »</button>
+                                            <button type="button" id="btn-next5-top" onclick="clientPagination.goToNextPages(5)" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50" title="Avanzar 5 páginas">+5 ⏩</button>
+                                            <button type="button" id="btn-last-top" onclick="clientPagination.goToLastPage()" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50" title="Ir al final">Final ⏭</button>
+                                            <div class="flex items-center gap-1">
+                                                <label for="goto-page-top" class="text-sm">Ir a página:</label>
+                                                <input type="number" id="goto-page-top" min="1" placeholder="#" class="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" onkeypress="if(event.key === 'Enter') clientPagination.goToPage(this.value)">
+                                                <button type="button" onclick="clientPagination.goToPage(document.getElementById('goto-page-top').value)" class="rounded-md bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 text-sm font-medium">Ir</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div id="productos-container" class="mt-4 space-y-6">
+                                    {% for producto in productos_encontrados %}
+                                    <div class="producto-item bg-gray-50 p-8 rounded-lg border shadow-sm" data-index="{{ loop.index0 }}">
+                                        <p class="text-lg font-medium text-gray-900"><strong>PROVEEDOR:</strong> {{ producto.proveedor }}</p>
+                                        {% if producto.fuente %}
+                                        <p class="text-xs text-gray-500 mt-1">
+                                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium {% if producto.fuente == 'DB' %}bg-blue-100 text-blue-800{% else %}bg-green-100 text-green-800{% endif %}">
+                                                Fuente: {{ producto.fuente }}
+                                            </span>
+                                        </p>
+                                        {% endif %}
+                                        <p class="text-lg text-black"><strong>CÓDIGO:</strong> {{ producto.codigo }}</p>
+                                        <p class="text-lg text-black"><strong>PRODUCTO:</strong> {{ producto.producto }}</p>
+                                        {# Categoria (si viene en extra_datos) #}
+                                        {% set categoria_val = None %}
+                                        {% if producto.extra_datos %}
+                                            {% for k, v in producto.extra_datos.items() %}
+                                                {% if k|lower == 'categoria' and v %}
+                                                    {% set categoria_val = v %}
+                                                {% endif %}
+                                            {% endfor %}
+                                        {% endif %}
+                                        {% if categoria_val %}
+                                            <p class="text-lg text-black"><strong>CATEGORIA:</strong> {{ categoria_val }}</p>
+                                        {% endif %}
+                                        <p class="text-lg text-black"><strong>IVA DEL PRODUCTO:</strong> {{ producto.iva }}</p>
+                                        
+                                        {# --- Precio principal destacado debajo de los datos --- #}
+                                        {% if producto.precios %}
+                                        {% set ns = namespace(main_name='', main_value=None) %}
+                                        {% for nombre, valor in producto.precios.items() %}
+                                            {% if loop.first %}
+                                                {% set ns.main_name = nombre %}
+                                                {% set ns.main_value = valor %}
+                                            {% endif %}
+                                        {% endfor %}
+                                        {% if ns.main_value is not none %}
+                                        <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            {# --- Columna izquierda: Precio principal y Precio de Lista --- #}
+                                            <div class="space-y-3">
+                                                <!-- Precio principal -->
+                                                <div class="flex items-baseline gap-2">
+                                                    <p class="text-lg text-black"><strong>{{ ns.main_name }}:</strong></p>
+                                                    <p class="text-3xl font-extrabold text-gray-900">${{ formatear_precio(ns.main_value) }}</p>
+                                                </div>
+
+                                                {# --- BremenTools: precio de lista destacado secundario --- #}
+                                                {% if producto.proveedor_key == 'brementools' and producto.precios %}
+                                                    {% set bremen = namespace(lista_val=None) %}
+                                                    {% for nombre, valor in producto.precios.items() %}
+                                                        {% if nombre|lower in ['precio de lista', 'precio lista'] %}
+                                                            {% set bremen.lista_val = valor %}
+                                                        {% endif %}
+                                                    {% endfor %}
+                                                    {% if bremen.lista_val is not none %}
+                                                    <div class="flex items-baseline gap-2">
+                                                        <p class="text-lg text-black"><strong>Precio de Lista:</strong></p>
+                                                        <p class="text-2xl font-extrabold text-gray-900">${{ formatear_precio(bremen.lista_val) }}</p>
+                                                    </div>
+                                                    {% endif %}
+                                                {% endif %}
+                                            </div>
+
+                                            {# --- Columna derecha: Precio Neto y Precio Neto Unitario --- #}
+                                            {% if producto.precios %}
+                                                {% set netos = namespace(neto_val=None, neto_unit_val=None) %}
+                                                {% for nombre, valor in producto.precios.items() %}
+                                                    {% if nombre|lower == 'precio neto' %}
+                                                        {% set netos.neto_val = valor %}
+                                                    {% elif nombre|lower == 'precio neto unitario' %}
+                                                        {% set netos.neto_unit_val = valor %}
+                                                    {% endif %}
+                                                {% endfor %}
+                                                {% if netos.neto_val is not none or netos.neto_unit_val is not none %}
+                                                <div class="space-y-3">
+                                                    {% if netos.neto_val is not none %}
+                                                    <div class="flex items-baseline gap-2">
+                                                        <p class="text-lg text-black"><strong>Precio Neto:</strong></p>
+                                                        <p class="text-2xl font-bold text-gray-900">${{ formatear_precio(netos.neto_val) }}</p>
+                                                    </div>
+                                                    {% endif %}
+                                                    {% if netos.neto_unit_val is not none %}
+                                                    <div class="flex items-baseline gap-2">
+                                                        <p class="text-lg text-black"><strong>Precio Neto Unitario:</strong></p>
+                                                        <p class="text-2xl font-bold text-gray-900">${{ formatear_precio(netos.neto_unit_val) }}</p>
+                                                    </div>
+                                                    {% endif %}
+                                                </div>
+                                                {% endif %}
+                                            {% endif %}
+                                        </div>
+                                        {% endif %}
+                                        {% endif %}
+                                        
+                                        {# --- Lista de otros precios (excluye el principal) --- #}
+                                        {% if producto.precios and (producto.precios|length) > 1 %}
+                                        <div class="mt-3 pt-3 border-t">
+                                            {% if producto.proveedor_key != 'brementools' %}
+                                                <p class="text-lg font-medium text-gray-900"><strong>PRECIOS:</strong></p>
+                                            {% endif %}
+                                            <ul class="text-lg text-black list-none space-y-2 mt-1">
+                                                {% for nombre, valor in producto.precios.items() %}
+                                                    {% set is_main = (nombre == ns.main_name) %}
+                                                    {% set is_lista_bremen = (producto.proveedor_key == 'brementools' and (nombre|lower in ['precio de lista', 'precio lista'])) %}
+                                                    {% set is_neto = (nombre|lower in ['precio neto', 'precio neto unitario']) %}
+                                                    {% if not is_main and not is_lista_bremen and not is_neto %}
+                                                    <li class="flex justify-between"><span>{{ nombre }}:</span> <strong>${{ formatear_precio(valor) }}</strong></li>
+                                                    {% endif %}
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+
+                                        {% if producto.extra_datos %}
+                                        <div class="mt-3 pt-3 border-t"><p class="text-lg font-medium text-gray-900"><strong>DATOS ADICIONALES:</strong></p>
+                                            <ul class="text-lg text-black list-none space-y-2 mt-1">
+                                                {% for nombre, valor in producto.extra_datos.items() %}
+                                                <li class="flex justify-between"><span>{{ nombre }}:</span> <strong>{{ valor }}</strong></li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+
+                                        {# --- BLOQUE PARA PRECIOS CALCULADOS --- #}
+                                        {% if producto.precios_calculados %}
+                                        <div class="mt-3 pt-3 border-t border-dashed border-blue-400 bg-blue-50 p-4 rounded-md">
+                                            <p class="text-lg font-medium text-blue-900"><strong>Precios Calculados:</strong></p>
+                                            <ul class="text-lg text-blue-700 list-none space-y-2 mt-1">
+                                                {% for nombre, valor in producto.precios_calculados.items() %}
+                                                <li class="flex justify-between"><span>{{ nombre }}:</span> <strong class="text-xl">${{ formatear_precio(valor) }}</strong></li>
+                                                {% endfor %}
+                                            </ul>
+                                        </div>
+                                        {% endif %}
+                                        {# --- FIN DEL BLOQUE --- #}
+                                    </div>
+                                    {% endfor %}
+                                    <!-- Paginación inferior -->
+                                    <div id="pagination-bottom" class="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                        <div class="text-sm text-gray-700">
+                                            <span>Página <strong id="current-page-bottom">1</strong> de <strong id="total-pages-bottom">1</strong></span>
+                                            <span class="mx-2">•</span>
+                                            <span>Mostrando <strong id="start-idx-bottom">1</strong>–<strong id="end-idx-bottom">20</strong> de <strong id="total-results-bottom">{{ productos_encontrados|length }}</strong></span>
+                                        </div>
+                                        <div class="flex items-center gap-2 flex-wrap">
+                                            <button type="button" id="btn-first-bottom" onclick="clientPagination.goToFirstPage()" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50" title="Ir al principio">⏮ Inicio</button>
+                                            <button type="button" id="btn-prev5-bottom" onclick="clientPagination.goToPreviousPages(5)" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50" title="Retroceder 5 páginas">⏪ -5</button>
+                                            <button type="button" id="btn-prev-bottom" onclick="clientPagination.goToPreviousPage()" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50">« Anterior</button>
+                                            <button type="button" id="btn-next-bottom" onclick="clientPagination.goToNextPage()" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50">Siguiente »</button>
+                                            <button type="button" id="btn-next5-bottom" onclick="clientPagination.goToNextPages(5)" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50" title="Avanzar 5 páginas">+5 ⏩</button>
+                                            <button type="button" id="btn-last-bottom" onclick="clientPagination.goToLastPage()" class="rounded-md bg-gray-200 hover:bg-gray-300 px-3 py-1 text-sm font-medium disabled:opacity-50" title="Ir al final">Final ⏭</button>
+                                            <div class="flex items-center gap-1">
+                                                <label for="goto-page-bottom" class="text-sm">Ir a página:</label>
+                                                <input type="number" id="goto-page-bottom" min="1" placeholder="#" class="w-16 px-2 py-1 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" onkeypress="if(event.key === 'Enter') clientPagination.goToPage(this.value)">
+                                                <button type="button" onclick="clientPagination.goToPage(document.getElementById('goto-page-bottom').value)" class="rounded-md bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 text-sm font-medium">Ir</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <p class="text-center text-xs text-gray-500">* Usa la "Calculadora Manual" en la pestaña "Cálculos" para ingresar el precio que elijas. *</p>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div id="content-calculos" class="tab-content hidden">
+                            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <div>
+                                    <h2 class="text-xl font-semibold text-gray-900 mb-4">🧮 Calculadora Automática</h2>
+                                    <form method="post" class="space-y-4 p-4 border rounded-md bg-gray-50">
+                                        <input type="hidden" name="formulario" value="calcular_auto">
+                                        <input type="hidden" class="active_tab_input" name="active_tab" value="calculos">
+                                        <div>
+                                            <label for="proveedor_id" class="block text-sm font-medium text-gray-700">Proveedor</label>
+                                            <select name="proveedor_id" id="proveedor_id" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                                <option value="">-- Selecciona --</option>
+                                                {% for prov_id, prov_nombre_visible in proveedores_lista %}
+                                                    <option value="{{ prov_id }}" {% if prov_id == datos_calculo_auto.get('proveedor_id') %}selected{% endif %}>{{ prov_nombre_visible }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label for="precio" class="block text-sm font-medium text-gray-700">Precio Base</label>
+                                            <input type="text" name="precio" id="precio" value="{{ datos_calculo_auto.get('precio', '') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        </div>
+                                        <div>
+                                            <label for="auto_producto" class="block text-sm font-medium text-gray-700">(Opcional) Producto</label>
+                                            <input type="text" name="auto_producto" id="auto_producto" value="{{ datos_calculo_auto.get('auto_producto', '') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        </div>
+                                        <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Calcular y Guardar</button>
+                                    </form>
+                                    {% if resultado_auto %}
+                                        <div class="mt-4 rounded-md bg-green-50 p-4 text-sm font-medium text-green-800">PRECIO FINAL: ${{ resultado_auto }}</div>
+                                    {% endif %}
+                                </div>
+                                <div>
+                                    <h2 class="text-xl font-semibold text-gray-900 mb-4">✍️ Calculadora Manual</h2>
+                                    <form method="post" class="p-4 border rounded-md bg-gray-50">
+                                        <input type="hidden" name="formulario" value="calcular_manual">
+                                        <input type="hidden" class="active_tab_input" name="active_tab" value="calculos">
+                                        <div class="grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2 mb-6">
+                                            <div><label for="manual_precio" class="block text-sm font-medium text-gray-700">Precio Base</label><input type="text" name="manual_precio" id="manual_precio" value="{{ datos_calculo_manual.get('manual_precio', '') }}" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                            <div><label for="manual_producto" class="block text-sm font-medium text-gray-700">(Opcional) Producto</label><input type="text" name="manual_producto" id="manual_producto" value="{{ datos_calculo_manual.get('manual_producto', '') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                            <div><label for="manual_proveedor_label" class="block text-sm font-medium text-gray-700">(Opcional) Proveedor</label><input type="text" name="manual_proveedor_label" id="manual_proveedor_label" value="{{ datos_calculo_manual.get('manual_proveedor_label', '') }}" placeholder="Ej: Proveedor X" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                            <div><label for="manual_observaciones" class="block text-sm font-medium text-gray-700">(Opcional) Observaciones</label><input type="text" name="manual_observaciones" id="manual_observaciones" value="{{ datos_calculo_manual.get('manual_observaciones', '') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                        </div>
+                                        <h3 class="text-lg font-medium text-gray-900">Porcentajes a Aplicar</h3>
+                                        <div class="mt-2 grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-3">
+                                            <div><label for="manual_descuento" class="block text-sm font-medium text-gray-700">Descuento (%)</label><input type="text" name="manual_descuento" value="{{ datos_calculo_manual.get('manual_descuento', '0.0') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                            <div><label for="manual_iva" class="block text-sm font-medium text-gray-700">IVA (%)</label><input type="text" name="manual_iva" value="{{ datos_calculo_manual.get('manual_iva', '21.0') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                            <div><label for="manual_ganancia" class="block text-sm font-medium text-gray-700">Ganancia (%)</label><input type="text" name="manual_ganancia" value="{{ datos_calculo_manual.get('manual_ganancia', '60.0') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                            <div><label for="desc_extra_1" class="block text-sm font-medium text-gray-700">Desc. Extra 1 (%)</label><input type="text" name="desc_extra_1" value="{{ datos_calculo_manual.get('desc_extra_1', '0.0') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                            <div><label for="desc_extra_2" class="block text-sm font-medium text-gray-700">Desc. Extra 2 (%)</label><input type="text" name="desc_extra_2" value="{{ datos_calculo_manual.get('desc_extra_2', '0.0') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                            <div><label for="ganancia_extra" class="block text-sm font-medium text-gray-700">Ganancia Extra (%)</label><input type="text" name="ganancia_extra" value="{{ datos_calculo_manual.get('ganancia_extra', '0.0') }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                        </div>
+                                        <button type="submit" class="mt-6 inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Calcular y Guardar</button>
+                                    </form>
+                                    {% if resultado_manual %}
+                                        <div class="mt-4 rounded-md bg-green-50 p-4 text-sm font-medium text-green-800">PRECIO FINAL: ${{ resultado_manual }}</div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="content-gestion" class="tab-content hidden">
+                             <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                                <div>
+                                    <h2 class="text-xl font-semibold text-gray-900 mb-4">🔧 Editar Proveedor</h2>
+                                    <form method="post" class="p-4 border rounded-md bg-gray-50">
+                                        <input type="hidden" name="formulario" value="editar">
+                                        <input type="hidden" class="active_tab_input" name="active_tab" value="gestion">
+                                        <label for="editar_proveedor_id" class="block text-sm font-medium text-gray-900">Selecciona para editar</label>
+                                        <select name="editar_proveedor_id" id="editar_proveedor_id" onchange="this.form.submit()" class="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                                            <option value="">-- Selecciona --</option>
+                                            {% for prov_id, prov_nombre_visible in proveedores_lista %}
+                                                <option value="{{ prov_id }}" {% if prov_id == proveedor_id_seleccionado %}selected{% endif %}>{{ prov_nombre_visible }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        {% if proveedor_id_seleccionado %}
+                                            <div class="mt-4 border-t pt-4 space-y-4">
+                                                <h3 class="text-lg font-medium text-gray-900">Editando: {{ generar_nombre_visible(datos_seleccionados) }}</h3>
+                                                <div><label class="block text-sm font-medium text-gray-700">Nombre Base</label><input type="text" name="edit_nombre_base" value="{{ datos_seleccionados.nombre_base }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                                    <div><label class="block text-sm font-medium text-gray-700">Descuento (%)</label><input type="text" name="descuento" value="{{ (datos_seleccionados.get('descuento', 0) * 100)|round(2) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                                    <div><label class="block text-sm font-medium text-gray-700">IVA (%)</label><input type="text" name="iva" value="{{ (datos_seleccionados.get('iva', 0) * 100)|round(2) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                                    <div><label class="block text-sm font-medium text-gray-700">Ganancia (%)</label><input type="text" name="ganancia" value="{{ (datos_seleccionados.get('ganancia', 0) * 100)|round(2) }}" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                                </div>
+                                                <div class="flex items-center"><input id="edit_es_dinamico" name="edit_es_dinamico" value="true" type="checkbox" {% if datos_seleccionados.es_dinamico %}checked{% endif %} class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><label for="edit_es_dinamico" class="ml-2 block text-sm text-gray-900">Generar nombre dinámico</label></div>
+                                                <button type="submit" name="guardar" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Guardar Cambios</button>
+                                            </div>
+                                        {% endif %}
+                                    </form>
+                                </div>
+                                <div class="space-y-8">
+                                    <div>
+                                        <h2 class="text-xl font-semibold text-gray-900 mb-4">➕ Agregar Nuevo Proveedor</h2>
+                                        <form method="post" class="p-4 border rounded-md bg-gray-50 space-y-4">
+                                            <input type="hidden" name="formulario" value="agregar">
+                                            <input type="hidden" class="active_tab_input" name="active_tab" value="gestion">
+                                            <div><label class="block text-sm font-medium text-gray-700">Nombre Base</label><input type="text" name="nuevo_nombre_base" required placeholder="Ej: Chiesa" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                                <div><label class="block text-sm font-medium text-gray-700">Descuento (%)</label><input type="text" name="nuevo_descuento" value="0.0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                                <div><label class="block text-sm font-medium text-gray-700">IVA (%)</label><input type="text" name="nuevo_iva" value="21.0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                                <div><label class="block text-sm font-medium text-gray-700">Ganancia (%)</label><input type="text" name="nuevo_ganancia" value="60.0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm"></div>
+                                            </div>
+                                            <div class="flex items-center"><input id="nuevo_es_dinamico" name="nuevo_es_dinamico" type="checkbox" value="true" checked class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><label for="nuevo_es_dinamico" class="ml-2 block text-sm text-gray-900">Generar nombre visible dinámico</label></div>
+                                            <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Agregar Proveedor</button>
+                                        </form>
+                                    </div>
+                                    <div>
+                                        <h2 class="text-xl font-semibold text-gray-900 mb-4">❌ Borrar Proveedor</h2>
+                                        <form method="post" class="p-4 border rounded-md bg-gray-50">
+                                            <input type="hidden" name="formulario" value="borrar">
+                                            <input type="hidden" class="active_tab_input" name="active_tab" value="gestion">
+                                            <label for="borrar_proveedor_id" class="block text-sm font-medium text-gray-700">Proveedor a Borrar</label>
+                                            <select name="borrar_proveedor_id" id="borrar_proveedor_id" required class="mt-1 block w-full rounded-md border-gray-300 py-2 pl-3 pr-10 text-base focus:border-indigo-500 focus:outline-none focus:ring-indigo-500 sm:text-sm">
+                                                <option value="">-- Selecciona un proveedor --</option>
+                                                {% for prov_id, prov_nombre_visible in proveedores_lista %}
+                                                    <option value="{{ prov_id }}">{{ prov_nombre_visible }}</option>
+                                                {% endfor %}
+                                            </select>
+                                            <button type="submit" class="mt-4 inline-flex justify-center rounded-md border border-transparent bg-red-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700" onclick="return confirm('¿Estás seguro de que quieres borrar este proveedor? Esta acción no se puede deshacer.')">Borrar Permanentemente</button>
+                                        </form>
+                                    </div>
+                                    <div>
+                                        <h2 class="text-xl font-semibold text-gray-900 mb-2">📤 Actualizar Listas de Precios (Excel)</h2>
+                                        <p class="text-xs text-gray-500 mb-3">Los nombres de archivo se renombrarán automáticamente a &lt;Proveedor&gt;-MMYYYY.xlsx (o DDMMYYYY si marcas incluir día). Si ya existe uno con el mismo nombre se sobrescribe.</p>
+                                        <form method="post" enctype="multipart/form-data" class="p-4 border rounded-md bg-gray-50 space-y-4">
+                                            <input type="hidden" name="formulario" value="subir_lista">
+                                            <input type="hidden" class="active_tab_input" name="active_tab" value="gestion">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">Archivo(s) Excel</label>
+                                                <input type="file" name="archivos_excel" multiple accept=".xlsx,.xls" class="mt-1 block w-full text-sm text-gray-700" />
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">Forzar Nombre de Proveedor (opcional)</label>
+                                                <select name="proveedor_archivo" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                                    <option value="">(Inferir automáticamente)</option>
+                                                    {% for nombre_prov in lista_nombres_proveedores %}
+                                                        <option value="{{ nombre_prov }}">{{ nombre_prov }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div class="flex items-center space-x-2">
+                                                <input type="checkbox" id="incluir_dia" name="incluir_dia" value="true" class="h-4 w-4 text-indigo-600 border-gray-300 rounded">
+                                                <label for="incluir_dia" class="text-sm text-gray-700">Incluir día en el nombre del archivo (DDMMYYYY)</label>
+                                            </div>
+                                            <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Subir / Actualizar</button>
+                                        </form>
+                                    </div>
+                                    <div>
+                                        <h2 class="text-xl font-semibold text-gray-900 mb-2">�️ Sincronizar Listas a Base (PostgreSQL)</h2>
+                                        <div class="p-4 border rounded-md bg-gray-50 space-y-3">
+                                            <p class="text-sm text-gray-600">Importa/actualiza los productos de los archivos Excel hacia la base de datos. Requiere tener LISTAS_EN_DB=1 y PostgreSQL disponible.</p>
+                                            <div class="flex items-center gap-2">
+                                                <button type="button" id="btn-sync-listas" class="inline-flex justify-center rounded-md border border-transparent bg-emerald-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">Sincronizar ahora</button>
+                                                <span id="sync-status" class="text-xs text-gray-500"></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <h2 class="text-xl font-semibold text-gray-900 mb-2">🧹 Vaciar Listas (Excel + DB)</h2>
+                                        <form method="POST" class="p-4 border rounded-md bg-red-50 space-y-3" onsubmit="return confirm('¿Eliminar TODAS las listas Excel y los registros de la base? Esta acción no se puede deshacer.');">
+                                            <input type="hidden" name="formulario" value="borrar_todas_listas">
+                                            <input type="hidden" class="active_tab_input" name="active_tab" value="gestion">
+                                            <p class="text-sm text-red-700">Borra todos los archivos Excel en la carpeta de listas y limpia las tablas de listas en la base de datos.</p>
+                                            <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-red-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-700">Eliminar todo</button>
+                                        </form>
+                                    </div>
+                                    <div>
+                                        <h2 class="text-xl font-semibold text-gray-900 mb-2">�🕒 Últimas Actualizaciones de Listas</h2>
+                                        {% if ultimas_actualizaciones %}
+                                        <div class="overflow-x-auto max-h-64 border rounded-md">
+                                            <table class="min-w-full divide-y divide-gray-200 text-sm">
+                                                <thead class="bg-gray-50">
+                                                    <tr>
+                                                        <th class="px-3 py-2 text-left font-semibold text-gray-700">Proveedor</th>
+                                                        <th class="px-3 py-2 text-left font-semibold text-gray-700">Archivo</th>
+                                                        <th class="px-3 py-2 text-left font-semibold text-gray-700">Modificado</th>
+                                                        <th class="px-3 py-2 text-left font-semibold text-gray-700">Hace</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody class="divide-y divide-gray-100 bg-white">
+                                                    {% for item in ultimas_actualizaciones %}
+                                                    <tr>
+                                                        <td class="px-3 py-1">{{ item.proveedor }}</td>
+                                                        <td class="px-3 py-1" title="{{ item.filename }}">{{ item.filename }}</td>
+                                                        <td class="px-3 py-1">{{ item.fecha }}</td>
+                                                        <td class="px-3 py-1 text-xs text-gray-500">{{ item.hace }}</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                        <p class="mt-1 text-xs text-gray-500">Ruta de almacenamiento: {{ listas_path }}</p>
+                                        {% else %}
+                                            <p class="text-sm text-gray-500">Aún no se han subido listas.</p>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <h2 class="text-xl font-semibold text-gray-900 mb-2">⬇️ Descargar Listas Vigentes</h2>
+                                        {% if listas_vigentes %}
+                                            <ul class="text-sm list-disc pl-5 space-y-1">
+                                                {% for f in listas_vigentes %}
+                                                <li class="flex items-center gap-2">
+                                                    <div class="flex-1 min-w-0">
+                                                        <a class="text-indigo-600 hover:underline break-all" href="/download_lista/{{ f.filename }}" download>{{ f.filename }}</a>
+                                                        <span class="text-xs text-gray-500">({{ f.fecha }})</span>
+                                                    </div>
+                                                    <form method="POST" class="m-0 p-0" onsubmit="return confirm('¿Eliminar esta lista?');">
+                                                        <input type="hidden" name="formulario" value="borrar_lista_vigente">
+                                                        <input type="hidden" name="filename" value="{{ f.filename }}">
+                                                        <input type="hidden" class="active_tab_input" name="active_tab" value="gestion">
+                                                        <button type="submit" title="Eliminar" class="rounded bg-red-500 hover:bg-red-600 text-white px-2 py-0.5 text-xs font-semibold">✕</button>
+                                                    </form>
+                                                </li>
+                                                {% if busqueda_total_resultados %}
+                                                {% set start = ((busqueda_page - 1) * busqueda_per_page) + 1 if busqueda_total_resultados > 0 else 0 %}
+                                                {% set end = (busqueda_page * busqueda_per_page) if (busqueda_page * busqueda_per_page) < busqueda_total_resultados else busqueda_total_resultados %}
+                                                <div class="mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                                    <p class="text-sm text-gray-600">Mostrando <strong>{{ start }}</strong>–<strong>{{ end }}</strong> de <strong>{{ busqueda_total_resultados }}</strong></p>
+                                                    <div class="inline-flex gap-2">
+                                                        <button type="button" class="px-3 py-1 rounded border text-sm {% if busqueda_page <= 1 %}opacity-50 cursor-not-allowed{% else %}hover:bg-gray-50{% endif %}" {% if busqueda_page > 1 %}onclick="document.getElementById('page_input').value={{ busqueda_page - 1 }}; document.getElementById('form-busqueda').submit();"{% else %}disabled{% endif %}>Anterior</button>
+                                                        <span class="text-sm text-gray-700">Página {{ busqueda_page }} de {{ busqueda_total_paginas }}</span>
+                                                        <button type="button" class="px-3 py-1 rounded border text-sm {% if busqueda_page >= busqueda_total_paginas %}opacity-50 cursor-not-allowed{% else %}hover:bg-gray-50{% endif %}" {% if busqueda_page < busqueda_total_paginas %}onclick="document.getElementById('page_input').value={{ busqueda_page + 1 }}; document.getElementById('form-busqueda').submit();"{% else %}disabled{% endif %}>Siguiente</button>
+                                                    </div>
+                                                </div>
+                                                {% endif %}
+                                                {% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            <p class="text-sm text-gray-500">No hay listas vigentes.</p>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <div class="flex items-center justify-between mb-2">
+                                            <h2 class="text-xl font-semibold text-gray-900">🗄️ Listas Antiguas (OLD)</h2>
+                                            {% if listas_old %}
+                                            <form method="POST" class="m-0 p-0" onsubmit="return confirm('¿Borrar TODAS las listas OLD?');">
+                                                <input type="hidden" name="formulario" value="borrar_listas_old">
+                                                <input type="hidden" class="active_tab_input" name="active_tab" value="gestion">
+                                                <button type="submit" class="rounded-md bg-red-600 px-2.5 py-1 text-xs font-semibold text-white shadow-sm hover:bg-red-700">Borrar OLD</button>
+                                            </form>
+                                            {% endif %}
+                                        </div>
+                                        {% if listas_old %}
+                                            <ul class="text-sm list-disc pl-5 space-y-1">
+                                                {% for f in listas_old %}
+                                                <li class="flex items-center gap-2">
+                                                    <div class="flex-1 min-w-0">
+                                                        <a class="text-orange-600 hover:underline break-all" href="/download_lista/{{ f.filename }}" download>{{ f.filename }}</a>
+                                                        <span class="text-xs text-gray-500">({{ f.fecha }})</span>
+                                                    </div>
+                                                    <form method="POST" class="m-0 p-0" onsubmit="return confirm('¿Eliminar esta lista OLD?');">
+                                                        <input type="hidden" name="formulario" value="borrar_lista_old_individual">
+                                                        <input type="hidden" name="filename" value="{{ f.filename }}">
+                                                        <input type="hidden" class="active_tab_input" name="active_tab" value="gestion">
+                                                        <button type="submit" title="Eliminar" class="rounded bg-red-500 hover:bg-red-600 text-white px-2 py-0.5 text-xs font-semibold">✕</button>
+                                                    </form>
+                                                </li>
+                                                {% endfor %}
+                                            </ul>
+                                        {% else %}
+                                            <p class="text-sm text-gray-500">No hay listas antiguas.</p>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="content-ventas_avanzadas" class="tab-content hidden">
+                            <div class="space-y-6">
+                                <div>
+                                    <h2 class="text-xl font-semibold text-gray-900">🚀 Ventas Avanzadas</h2>
+                                    <p class="text-sm text-gray-600">Calcula ventas por unidad a partir del archivo <strong>productos_manual.xlsx</strong> (Columnas: A=Código, C=Nombre, D=Precio).</p>
+                                </div>
+                                <div id="ventas-avanzadas-dynamic">
+                                    {% include 'ventas_avanzadas_fragment.html' %}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="content-historial" class="tab-content hidden">
+                            <h2 class="text-xl font-semibold text-gray-900 mb-4">🧾 Historial de Cálculos</h2>
+                            <div class="flex justify-between items-center mb-4">
+                                <form method="POST" id="form-historial" class="m-0 p-0">
+                                    <input type="hidden" name="formulario" value="borrar_historial_seleccionado">
+                                    <input type="hidden" class="active_tab_input" name="active_tab" value="historial">
+                                    <button type="submit" class="rounded-md bg-yellow-500 px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-yellow-600" onclick="return confirm('¿Borrar las entradas seleccionadas del historial?')">Borrar Seleccionados</button>
+                                </form>
+                                <form method="POST" class="m-0 p-0">
+                                    <input type="hidden" name="formulario" value="borrar_todo_historial">
+                                    <input type="hidden" class="active_tab_input" name="active_tab" value="historial">
+                                    <button type="submit" class="rounded-md bg-red-600 px-2.5 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-700" onclick="return confirm('¡¡PELIGRO!! ¿Estás seguro de que quieres borrar TODO el historial permanentemente? Esta acción no se puede deshacer.')">Borrar Todo el Historial</button>
+                                </form>
+                            </div>
+                            <div class="overflow-x-auto">
+                                <table id="historial" class="min-w-full divide-y divide-gray-300">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                                            <th class="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-900">Sel.</th>
+                                            <th class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Fecha/Hora</th>
+                                            <th class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Tipo</th>
+                                            <th class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Proveedor</th>
+                                            <th class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Producto</th>
+                                            <th class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Precio Base</th>
+                                            <th class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Porcentajes Aplicados</th>
+                                            <th class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Precio Final</th>
+                                            <th class="px-3 py-3.5 text-left text-sm font-semibold text-gray-900">Obs.</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="divide-y divide-gray-200 bg-white">
+                                        {% for item in historial %}
+                                        <tr>
+                                            <td class="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900"><input type="checkbox" name="historial_ids_a_borrar" value="{{ item.id_historial }}" form="form-historial" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"></td>
+                                            <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ item.timestamp }}</td>
+                                            <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ item.tipo_calculo }}</td>
+                                            <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">{{ item.proveedor_nombre }}</td>
+                                            <td class="px-3 py-4 text-sm text-gray-500" style="min-width: 150px; max-width: 250px; white-space: normal;">{{ item.producto }}</td>
+                                            <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-500">${{ formatear_precio(item.precio_base) }}</td>
+                                            
+                                            <!-- CELDA DE PORCENTAJES DETALLADOS -->
+                                            <td class="px-3 py-4 text-sm text-gray-500" style="min-width: 200px;">
+                                                <div class="space-y-1">
+                                                    {% set p = item.porcentajes %}
+                                                    <div class="flex justify-between"><span>Desc:</span> <span>{{ (p.descuento * 100)|round(2) }}%</span></div>
+                                                    {% if p.descuento_extra_1 %}<div class="flex justify-between text-xs pl-2"><span>└ Extra 1:</span> <span>{{ (p.descuento_extra_1 * 100)|round(2) }}%</span></div>{% endif %}
+                                                    {% if p.descuento_extra_2 %}<div class="flex justify-between text-xs pl-2"><span>└ Extra 2:</span> <span>{{ (p.descuento_extra_2 * 100)|round(2) }}%</span></div>{% endif %}
+                                                    <div class="flex justify-between border-t border-gray-200 mt-1 pt-1"><span>IVA:</span> <span>{{ (p.iva * 100)|round(2) }}%</span></div>
+                                                    <div class="flex justify-between"><span>Gan:</span> <span>{{ (p.ganancia * 100)|round(2) }}%</span></div>
+                                                    {% if p.ganancia_extra %}<div class="flex justify-between text-xs pl-2"><span>└ Extra:</span> <span>{{ (p.ganancia_extra * 100)|round(2) }}%</span></div>{% endif %}
+                                                </div>
+                                            </td>
+
+                                            <td class="whitespace-nowrap px-3 py-4 text-sm text-gray-900"><strong>${{ formatear_precio(item.precio_final) }}</strong></td>
+                                            <td class="px-3 py-4 text-sm text-gray-500" style="min-width: 150px; max-width: 250px; white-space: normal;">{{ item.observaciones }}</td>
+                                        </tr>
+                                        {% else %}
+                                        <tr>
+                                            <td colspan="9" class="whitespace-nowrap px-3 py-4 text-sm text-center text-gray-500">No hay cálculos en el historial.</td>
+                                        </tr>
+                                        {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        function showTab(tabName) {
+            // Ocultar todos los contenidos
+            document.querySelectorAll('.tab-content').forEach(function(content) {
+                content.classList.add('hidden');
+            });
+            // Quitar estilos activos de todas las pestañas
+            document.querySelectorAll('nav a').forEach(function(tab) {
+                tab.classList.remove('border-indigo-500', 'text-indigo-600');
+                tab.classList.add('border-transparent', 'text-gray-500', 'hover:border-gray-300', 'hover:text-gray-700');
+            });
+            // Mostrar el contenido de la pestaña seleccionada
+            document.getElementById('content-' + tabName).classList.remove('hidden');
+            // Aplicar estilo activo a la pestaña seleccionada
+            let activeTabLink = document.getElementById('tab-' + tabName);
+            activeTabLink.classList.add('border-indigo-500', 'text-indigo-600');
+            activeTabLink.classList.remove('border-transparent', 'text-gray-500', 'hover:border-gray-300', 'hover:text-gray-700');
+            
+            // Actualiza todos los campos ocultos con la pestaña activa
+            document.querySelectorAll('.active_tab_input').forEach(function(input) {
+                input.value = tabName;
+            });
+        }
+
+        // Al cargar la página, muestra la pestaña correcta
+        document.addEventListener('DOMContentLoaded', function() {
+            const activeTabOnLoad = "{{ active_tab | default('busqueda') }}";
+            showTab(activeTabOnLoad);
+
+            // Botón de sincronización de listas a DB
+            const btnSync = document.getElementById('btn-sync-listas');
+            const syncStatus = document.getElementById('sync-status');
+            if (btnSync) {
+                btnSync.addEventListener('click', async () => {
+                    syncStatus.textContent = 'Sincronizando...';
+                    btnSync.disabled = true;
+                    try {
+                        const r = await fetch('/admin/sync_listas', { method: 'POST', headers: { 'Accept': 'application/json' } });
+                        const data = await r.json();
+                        if (data.ok) {
+                            const total = data.resumen?.insertados ?? 0;
+                            syncStatus.textContent = `OK: ${total} productos actualizados`;
+                            alert('Sincronización completa: ' + JSON.stringify(data.resumen));
+                        } else {
+                            syncStatus.textContent = 'Error';
+                            alert('Error en sincronización: ' + (data.error || 'desconocido'));
+                        }
+                    } catch (e) {
+                        console.error(e);
+                        syncStatus.textContent = 'Error de red';
+                        alert('No se pudo conectar para sincronizar.');
+                    } finally {
+                        btnSync.disabled = false;
+                    }
+                });
+            }
+
+            const ventasRoot = document.getElementById('ventas-avanzadas-dynamic');
+            if (ventasRoot) {
+                // Variable para almacenar el botón que fue clickeado
+                let clickedButton = null;
+                
+                // Capturar qué botón de submit fue clickeado
+                ventasRoot.addEventListener('click', function(event) {
+                    if (event.target.type === 'submit') {
+                        clickedButton = event.target;
+                    }
+                }, true);
+                
+                ventasRoot.addEventListener('submit', async function(event) {
+                    const form = event.target;
+                    if (!(form instanceof HTMLFormElement)) {
+                        return;
+                    }
+                    event.preventDefault();
+                    const formData = new FormData(form);
+                    
+                    // Agregar el valor del botón clickeado al FormData
+                    if (clickedButton && clickedButton.name && clickedButton.value) {
+                        formData.set(clickedButton.name, clickedButton.value);
+                    }
+                    
+                    try {
+                        const response = await fetch(form.action || window.location.pathname, {
+                            method: form.method || 'POST',
+                            headers: {
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            credentials: 'same-origin',
+                            body: formData
+                        });
+                        if (!response.ok) {
+                            throw new Error('Respuesta no exitosa');
+                        }
+                        const payload = await response.json();
+                        if (payload && payload.html) {
+                            ventasRoot.innerHTML = payload.html;
+                        }
+                        if (typeof showTab === 'function') {
+                            showTab('ventas_avanzadas');
+                        }
+                    } catch (err) {
+                        console.error('Error al procesar Ventas Avanzadas:', err);
+                        alert('No se pudo actualizar la sección de Ventas Avanzadas. Intenta nuevamente.');
+                    } finally {
+                        clickedButton = null; // Resetear el botón clickeado
+                    }
+                });
+            }
+        });
+
+        // Paginación del lado del cliente
+        const clientPagination = {
+            currentPage: 1,
+            itemsPerPage: {{ busqueda_per_page or 20 }},
+            totalItems: 0,
+            totalPages: 0,
+            
+            init() {
+                const container = document.getElementById('productos-container');
+                if (!container) return;
+                
+                const items = container.querySelectorAll('.producto-item');
+                this.totalItems = items.length;
+                this.totalPages = Math.ceil(this.totalItems / this.itemsPerPage);
+                
+                // Actualizar selector de items por página
+                const perPageSelect = document.getElementById('per_page');
+                if (perPageSelect) {
+                    perPageSelect.addEventListener('change', (e) => {
+                        this.itemsPerPage = parseInt(e.target.value) || 20;
+                        this.totalPages = Math.ceil(this.totalItems / this.itemsPerPage);
+                        this.currentPage = 1;
+                        this.render();
+                    });
+                }
+                
+                this.render();
+            },
+            
+            render() {
+                const container = document.getElementById('productos-container');
+                if (!container) return;
+                
+                const items = container.querySelectorAll('.producto-item');
+                const startIdx = (this.currentPage - 1) * this.itemsPerPage;
+                const endIdx = startIdx + this.itemsPerPage;
+                
+                // Mostrar/ocultar items según página actual
+                items.forEach((item, index) => {
+                    if (index >= startIdx && index < endIdx) {
+                        item.style.display = '';
+                    } else {
+                        item.style.display = 'none';
+                    }
+                });
+                
+                // Actualizar controles de paginación
+                this.updateControls();
+                
+                // Scroll suave hacia arriba
+                const searchResults = document.querySelector('#content-busqueda h3');
+                if (searchResults) {
+                    searchResults.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            },
+            
+            updateControls() {
+                const startIdx = (this.currentPage - 1) * this.itemsPerPage + (this.totalItems > 0 ? 1 : 0);
+                const endIdx = Math.min(this.totalItems, this.currentPage * this.itemsPerPage);
+                
+                // Actualizar textos (top y bottom)
+                ['top', 'bottom'].forEach(pos => {
+                    const currentPageEl = document.getElementById(`current-page-${pos}`);
+                    const totalPagesEl = document.getElementById(`total-pages-${pos}`);
+                    const startIdxEl = document.getElementById(`start-idx-${pos}`);
+                    const endIdxEl = document.getElementById(`end-idx-${pos}`);
+                    
+                    if (currentPageEl) currentPageEl.textContent = this.currentPage;
+                    if (totalPagesEl) totalPagesEl.textContent = this.totalPages;
+                    if (startIdxEl) startIdxEl.textContent = startIdx;
+                    if (endIdxEl) endIdxEl.textContent = endIdx;
+                });
+                
+                // Habilitar/deshabilitar botones de navegación
+                const isFirstPage = this.currentPage <= 1;
+                const isLastPage = this.currentPage >= this.totalPages;
+                const canGoBack5 = this.currentPage > 5;
+                const canGoForward5 = this.currentPage <= this.totalPages - 5;
+                
+                ['top', 'bottom'].forEach(pos => {
+                    const btnFirst = document.getElementById(`btn-first-${pos}`);
+                    const btnPrev5 = document.getElementById(`btn-prev5-${pos}`);
+                    const btnPrev = document.getElementById(`btn-prev-${pos}`);
+                    const btnNext = document.getElementById(`btn-next-${pos}`);
+                    const btnNext5 = document.getElementById(`btn-next5-${pos}`);
+                    const btnLast = document.getElementById(`btn-last-${pos}`);
+                    
+                    if (btnFirst) btnFirst.disabled = isFirstPage;
+                    if (btnPrev5) btnPrev5.disabled = !canGoBack5;
+                    if (btnPrev) btnPrev.disabled = isFirstPage;
+                    if (btnNext) btnNext.disabled = isLastPage;
+                    if (btnNext5) btnNext5.disabled = !canGoForward5;
+                    if (btnLast) btnLast.disabled = isLastPage;
+                });
+            },
+            
+            goToFirstPage() {
+                if (this.currentPage !== 1) {
+                    this.currentPage = 1;
+                    this.render();
+                }
+            },
+            
+            goToLastPage() {
+                if (this.currentPage !== this.totalPages) {
+                    this.currentPage = this.totalPages;
+                    this.render();
+                }
+            },
+            
+            goToNextPage() {
+                if (this.currentPage < this.totalPages) {
+                    this.currentPage++;
+                    this.render();
+                }
+            },
+            
+            goToPreviousPage() {
+                if (this.currentPage > 1) {
+                    this.currentPage--;
+                    this.render();
+                }
+            },
+            
+            goToNextPages(count) {
+                const newPage = Math.min(this.currentPage + count, this.totalPages);
+                if (newPage !== this.currentPage) {
+                    this.currentPage = newPage;
+                    this.render();
+                }
+            },
+            
+            goToPreviousPages(count) {
+                const newPage = Math.max(this.currentPage - count, 1);
+                if (newPage !== this.currentPage) {
+                    this.currentPage = newPage;
+                    this.render();
+                }
+            },
+            
+            goToPage(pageNumber) {
+                const page = parseInt(pageNumber);
+                if (isNaN(page) || page < 1 || page > this.totalPages) {
+                    alert(`Por favor, ingresa un número válido entre 1 y ${this.totalPages}`);
+                    return;
+                }
+                if (page !== this.currentPage) {
+                    this.currentPage = page;
+                    this.render();
+                    // Limpiar los campos de entrada
+                    const topInput = document.getElementById('goto-page-top');
+                    const bottomInput = document.getElementById('goto-page-bottom');
+                    if (topInput) topInput.value = '';
+                    if (bottomInput) bottomInput.value = '';
+                }
+            }
+        };
+        
+        // Inicializar paginación cuando se carga la página
+        document.addEventListener('DOMContentLoaded', () => {
+            clientPagination.init();
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+.env
+venv/
+.build/
+*.sqlite3
+
+# Virtual environments
+env/
+.venv/
+
+# PyInstaller / build artifacts
+build/
+dist/
+*.spec
+*.exe
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local data files not for repo
+historial.json
+datos_v2.json
+listas_excel/*
+!listas_excel/.gitkeep
+auth.json
+
+# Archivos temporales y locales
+*.sqlite3
+app_v5.sqlite3
+*.bat
+*.exe
+Start_*.bat
+Open_*.bat
+
+# Archivos de test y debug
+test_*.py
+debug_*.py
+gestor_copia.py
+
+# Directorios de build
+build/
+dist/
+__pycache__/

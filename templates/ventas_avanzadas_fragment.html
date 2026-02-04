@@ -1,0 +1,605 @@
+{% if ventas_mensaje %}
+    {% set es_exito = '✅' in ventas_mensaje %}
+    <div class="rounded-md border px-4 py-3 text-sm {% if es_exito %}bg-green-50 border-green-200 text-green-800{% else %}bg-yellow-50 border-yellow-200 text-yellow-800{% endif %}">
+        {{ ventas_mensaje }}
+    </div>
+{% endif %}
+
+{% if productos_manual %}
+<form method="post" class="p-4 border rounded-lg bg-white shadow-sm space-y-4">
+    <input type="hidden" name="formulario" value="ventas_avanzadas_buscar">
+    <input type="hidden" class="active_tab_input" name="active_tab" value="ventas_avanzadas">
+    <input type="hidden" name="ventas_page" value="1">
+    <input type="hidden" name="ventas_codigo" value="{{ ventas_inputs.codigo }}">
+    <input type="hidden" name="ventas_nombre" value="{{ ventas_inputs.nombre_principal }}">
+    <input type="hidden" name="ventas_precio" value="{{ ventas_inputs.precio }}">
+    <input type="hidden" name="ventas_monto" value="{{ ventas_inputs.monto }}">
+    <input type="hidden" name="ventas_cantidad" value="{{ ventas_inputs.cantidad }}">
+    <input type="hidden" name="combo_cantidad_principal" value="{{ ventas_inputs.combo_cantidad_principal }}">
+    <input type="hidden" name="combo_precio_principal" value="{{ ventas_inputs.precio }}">
+    <input type="hidden" name="ventas_codigo_comp" value="{{ ventas_inputs.codigo_comp }}">
+    <input type="hidden" name="ventas_nombre_comp" value="{{ ventas_inputs.nombre_complemento }}">
+    <input type="hidden" name="combo_precio_complemento" value="{{ ventas_inputs.precio_comp }}">
+    <input type="hidden" name="combo_cantidad_complemento" value="{{ ventas_inputs.combo_cantidad_complemento }}">
+    <input type="hidden" name="combo_monto_disponible" value="{{ ventas_inputs.combo_monto_disponible }}">
+    <div>
+        <label for="ventas_busqueda" class="block text-sm font-medium text-gray-700">Buscar productos manuales</label>
+        <input type="text" id="ventas_busqueda" name="ventas_busqueda" value="{{ ventas_busqueda_query }}" placeholder="Código, nombre o medida (ej: 1/2, tornillo, 123)" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+    </div>
+    <div class="flex flex-wrap items-center gap-3">
+        <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Buscar</button>
+        {% if ventas_busqueda_total_resultados %}
+            <span class="text-sm text-gray-500">Resultados totales: {{ ventas_busqueda_total_resultados }} (máx. {{ ventas_resultados_por_pagina }} por página)</span>
+        {% endif %}
+    </div>
+</form>
+
+{% if ventas_producto_seleccionado %}
+<div class="mt-4 border rounded-lg bg-indigo-50 border-indigo-200 p-4 text-sm text-indigo-900">
+    <p class="font-semibold">Producto seleccionado</p>
+    <p><strong>Código:</strong> {{ ventas_producto_seleccionado.codigo }}</p>
+    <p><strong>Nombre:</strong> {{ ventas_producto_seleccionado.nombre }}</p>
+    {% if ventas_producto_seleccionado.proveedor %}
+    <p><strong>Proveedor:</strong> {{ ventas_producto_seleccionado.proveedor }}</p>
+    {% endif %}
+    <p><strong>Precio desde Excel:</strong>
+        {% if ventas_producto_seleccionado.precio_valido %}
+            ${{ formatear_precio(ventas_producto_seleccionado.precio) }}
+        {% else %}
+            <span class="text-red-600">No disponible</span>
+        {% endif %}
+    </p>
+    {% if not ventas_producto_seleccionado.precio_valido %}
+        <p class="mt-2 text-xs text-red-700">Ingresá manualmente el precio unitario en los formularios para realizar los cálculos.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if ventas_producto_complemento %}
+<div class="mt-4 border rounded-lg bg-purple-50 border-purple-200 p-4 text-sm text-purple-900">
+    <p class="font-semibold">Complemento seleccionado</p>
+    <p><strong>Código:</strong> {{ ventas_producto_complemento.codigo }}</p>
+    <p><strong>Nombre:</strong> {{ ventas_producto_complemento.nombre }}</p>
+    {% if ventas_producto_complemento.proveedor %}
+    <p><strong>Proveedor:</strong> {{ ventas_producto_complemento.proveedor }}</p>
+    {% endif %}
+    <p><strong>Precio desde Excel:</strong>
+        {% if ventas_producto_complemento.precio_valido %}
+            ${{ formatear_precio(ventas_producto_complemento.precio) }}
+        {% else %}
+            <span class="text-red-600">No disponible</span>
+        {% endif %}
+    </p>
+    {% if not ventas_producto_complemento.precio_valido %}
+        <p class="mt-2 text-xs text-red-700">Ingresá manualmente el precio unitario del complemento dentro del formulario combinado.</p>
+    {% endif %}
+</div>
+{% endif %}
+
+<div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+    {% if ventas_producto_seleccionado %}
+    <div class="p-6 border rounded-lg bg-white shadow-sm space-y-4">
+        <div>
+            <h3 class="text-lg font-semibold text-gray-900">Unidades por monto disponible</h3>
+            <p class="text-xs text-gray-500">Indica cuánto dinero tiene el cliente para saber cuántas unidades entregar.</p>
+        </div>
+        <form method="post" class="space-y-4">
+            <input type="hidden" name="formulario" value="ventas_avanzadas_monto">
+            <input type="hidden" class="active_tab_input" name="active_tab" value="ventas_avanzadas">
+            <input type="hidden" name="ventas_codigo" value="{{ ventas_producto_seleccionado.codigo }}">
+            <input type="hidden" name="ventas_busqueda" value="{{ ventas_busqueda_query }}">
+            <input type="hidden" name="ventas_page" value="{{ ventas_busqueda_page }}">
+            <input type="hidden" name="ventas_codigo_comp" value="{{ ventas_inputs.codigo_comp }}">
+            <input type="hidden" name="ventas_nombre_comp" value="{{ ventas_inputs.nombre_complemento }}">
+            <input type="hidden" name="combo_precio_complemento" value="{{ ventas_inputs.precio_comp }}">
+            <input type="hidden" name="combo_cantidad_complemento" value="{{ ventas_inputs.combo_cantidad_complemento }}">
+            <input type="hidden" name="combo_precio_principal" value="{{ ventas_inputs.precio }}">
+            <input type="hidden" name="combo_cantidad_principal" value="{{ ventas_inputs.combo_cantidad_principal }}">
+            <input type="hidden" name="combo_monto_disponible" value="{{ ventas_inputs.combo_monto_disponible }}">
+            <div>
+                <label for="ventas_precio_monto" class="block text-sm font-medium text-gray-700">Precio unitario ($)</label>
+                <input type="text" id="ventas_precio_monto" name="ventas_precio" value="{{ ventas_inputs.precio }}" placeholder="Ej: 12500" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                {% if not ventas_producto_seleccionado.precio_valido %}
+                    <p class="mt-1 text-xs text-red-600">Este producto no tiene precio en el Excel, definilo manualmente.</p>
+                {% endif %}
+            </div>
+            <div class="grid grid-cols-1 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Producto seleccionado</label>
+                    <input type="text" value="{{ ventas_producto_seleccionado.codigo }} - {{ ventas_producto_seleccionado.nombre }}{% if ventas_producto_seleccionado.proveedor %} ({{ ventas_producto_seleccionado.proveedor }}){% endif %}" readonly class="mt-1 block w-full rounded-md border-gray-200 bg-gray-100 text-sm text-gray-700">
+                </div>
+            </div>
+            <div>
+                <label for="ventas_monto" class="block text-sm font-medium text-gray-700">Monto disponible ($)</label>
+                <input type="text" id="ventas_monto" name="ventas_monto" value="{{ ventas_inputs.monto }}" placeholder="Ej: 5000" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+            <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Calcular unidades</button>
+        </form>
+        {% if ventas_resultado_por_monto %}
+        <div class="mt-2 rounded-md border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900">
+            <p><strong>{{ ventas_resultado_por_monto.producto.nombre }}</strong> ({{ ventas_resultado_por_monto.producto.codigo }})</p>
+            {% if ventas_resultado_por_monto.producto.proveedor %}
+                <p class="text-xs text-blue-700">Proveedor: {{ ventas_resultado_por_monto.producto.proveedor }}</p>
+            {% endif %}
+            <p>Precio unitario: ${{ formatear_precio(ventas_resultado_por_monto.precio_unitario) }}</p>
+            <p>Monto disponible: ${{ formatear_precio(ventas_resultado_por_monto.monto) }}</p>
+            <p class="mt-2">Entregar <strong>{{ ventas_resultado_por_monto.cantidad }}</strong> unidad(es).</p>
+            <p>Equivalente exacto: {{ '%.2f'|format(ventas_resultado_por_monto.cantidad_exacta) }} unidad(es).</p>
+            {% if ventas_resultado_por_monto.resto > 0 %}
+                <p>Sobra ${{ formatear_precio(ventas_resultado_por_monto.resto) }}.</p>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    <div class="p-6 border rounded-lg bg-white shadow-sm space-y-4">
+        <div>
+            <h3 class="text-lg font-semibold text-gray-900">Precio total por cantidad</h3>
+            <p class="text-xs text-gray-500">Ingresa la cantidad solicitada para conocer cuánto cobrar.</p>
+        </div>
+        <form method="post" class="space-y-4">
+            <input type="hidden" name="formulario" value="ventas_avanzadas_cantidad">
+            <input type="hidden" class="active_tab_input" name="active_tab" value="ventas_avanzadas">
+            <input type="hidden" name="ventas_codigo" value="{{ ventas_producto_seleccionado.codigo }}">
+            <input type="hidden" name="ventas_busqueda" value="{{ ventas_busqueda_query }}">
+            <input type="hidden" name="ventas_page" value="{{ ventas_busqueda_page }}">
+            <input type="hidden" name="ventas_codigo_comp" value="{{ ventas_inputs.codigo_comp }}">
+            <input type="hidden" name="ventas_nombre_comp" value="{{ ventas_inputs.nombre_complemento }}">
+            <input type="hidden" name="combo_precio_complemento" value="{{ ventas_inputs.precio_comp }}">
+            <input type="hidden" name="combo_cantidad_complemento" value="{{ ventas_inputs.combo_cantidad_complemento }}">
+            <input type="hidden" name="combo_precio_principal" value="{{ ventas_inputs.precio }}">
+            <input type="hidden" name="combo_cantidad_principal" value="{{ ventas_inputs.combo_cantidad_principal }}">
+            <input type="hidden" name="combo_monto_disponible" value="{{ ventas_inputs.combo_monto_disponible }}">
+            <div>
+                <label for="ventas_precio_cantidad" class="block text-sm font-medium text-gray-700">Precio unitario ($)</label>
+                <input type="text" id="ventas_precio_cantidad" name="ventas_precio" value="{{ ventas_inputs.precio }}" placeholder="Ej: 12500" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                {% if not ventas_producto_seleccionado.precio_valido %}
+                    <p class="mt-1 text-xs text-red-600">Este producto no tiene precio en el Excel, definilo manualmente.</p>
+                {% endif %}
+            </div>
+            <div class="grid grid-cols-1 gap-3">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700">Producto seleccionado</label>
+                    <input type="text" value="{{ ventas_producto_seleccionado.codigo }} - {{ ventas_producto_seleccionado.nombre }}{% if ventas_producto_seleccionado.proveedor %} ({{ ventas_producto_seleccionado.proveedor }}){% endif %}" readonly class="mt-1 block w-full rounded-md border-gray-200 bg-gray-100 text-sm text-gray-700">
+                </div>
+            </div>
+            <div>
+                <label for="ventas_cantidad" class="block text-sm font-medium text-gray-700">Cantidad solicitada</label>
+                <input type="text" id="ventas_cantidad" name="ventas_cantidad" value="{{ ventas_inputs.cantidad }}" placeholder="Ej: 50" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+            </div>
+            <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Calcular total</button>
+        </form>
+        {% if ventas_resultado_por_cantidad %}
+        <div class="mt-2 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+            <p><strong>{{ ventas_resultado_por_cantidad.producto.nombre }}</strong> ({{ ventas_resultado_por_cantidad.producto.codigo }})</p>
+            {% if ventas_resultado_por_cantidad.producto.proveedor %}
+                <p class="text-xs text-blue-700">Proveedor: {{ ventas_resultado_por_cantidad.producto.proveedor }}</p>
+            {% endif %}
+            <p>Precio unitario: ${{ formatear_precio(ventas_resultado_por_cantidad.precio_unitario) }}</p>
+            <p>Cantidad solicitada: <strong>{{ ventas_resultado_por_cantidad.cantidad|round(2) }}</strong> unidad(es)</p>
+            <p>Total a cobrar: <strong>${{ formatear_precio(ventas_resultado_por_cantidad.total) }}</strong></p>
+        </div>
+        {% endif %}
+    </div>
+    {% else %}
+    <div class="p-6 border border-dashed border-gray-300 rounded-lg bg-gray-50 text-sm text-gray-600">
+        <p>Busca y selecciona un producto para habilitar los cálculos.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="mt-6 p-6 border rounded-lg bg-white shadow-sm space-y-4">
+    <div>
+        <h3 class="text-lg font-semibold text-gray-900">Venta combinada principal + complemento</h3>
+        <p class="text-xs text-gray-500">Usa este formulario opcional para sumar un segundo producto (por ejemplo tornillos + tarugos). Podés ingresar cantidades y precios manuales para cada uno.</p>
+    </div>
+    <form method="post" class="space-y-6">
+        <input type="hidden" name="formulario" value="ventas_avanzadas_combo">
+        <input type="hidden" class="active_tab_input" name="active_tab" value="ventas_avanzadas">
+        <input type="hidden" name="ventas_busqueda" value="{{ ventas_busqueda_query }}">
+        <input type="hidden" name="ventas_page" value="{{ ventas_busqueda_page }}">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-sm font-semibold text-gray-900">Producto principal</h4>
+                        {% if ventas_producto_seleccionado %}
+                            <span class="text-xs text-gray-500">Seleccionado desde la lista</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="combo_codigo_principal" class="block text-xs font-medium text-gray-600">Código</label>
+                        <input type="text" id="combo_codigo_principal" name="ventas_codigo" value="{{ ventas_inputs.codigo }}" placeholder="Código principal" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                    </div>
+                    {% if ventas_producto_seleccionado %}
+                        <input type="hidden" name="ventas_nombre" value="{{ ventas_producto_seleccionado.nombre }}">
+                        <p class="text-xs text-gray-500 bg-indigo-50 border border-indigo-100 rounded-md px-3 py-2">{{ ventas_producto_seleccionado.codigo }} - {{ ventas_producto_seleccionado.nombre }}{% if ventas_producto_seleccionado.proveedor %} · <span class="text-blue-700">{{ ventas_producto_seleccionado.proveedor }}</span>{% endif %}</p>
+                    {% else %}
+                        <div>
+                            <label for="combo_nombre_principal" class="block text-xs font-medium text-gray-600">Nombre</label>
+                            <input type="text" id="combo_nombre_principal" name="ventas_nombre" value="{{ ventas_inputs.nombre_principal }}" placeholder="Nombre del producto principal" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                        </div>
+                    {% endif %}
+                    <div>
+                        <label for="combo_precio_principal" class="block text-xs font-medium text-gray-600">Precio unitario ($)</label>
+                        <input type="text" id="combo_precio_principal" name="combo_precio_principal" value="{{ ventas_inputs.precio }}" placeholder="Ej: 1500" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label for="combo_cantidad_principal" class="block text-xs font-medium text-gray-600">Cantidad</label>
+                            <input type="text" id="combo_cantidad_principal" name="combo_cantidad_principal" value="{{ ventas_inputs.combo_cantidad_principal }}" placeholder="Ej: 10" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                        </div>
+                        <div>
+                            <label for="combo_monto_principal" class="block text-xs font-medium text-indigo-700">💵 Monto ($)</label>
+                            <input type="text" id="combo_monto_principal" name="combo_monto_principal" value="{{ ventas_inputs.combo_monto_principal }}" placeholder="Dinero" class="mt-1 block w-full rounded-md border-indigo-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm bg-indigo-50/30">
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-sm font-semibold text-gray-900">Complemento</h4>
+                        {% if ventas_producto_complemento %}
+                            <span class="text-xs text-gray-500">Seleccionado desde la lista</span>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <label for="combo_codigo_complemento" class="block text-xs font-medium text-gray-600">Código</label>
+                        <input type="text" id="combo_codigo_complemento" name="ventas_codigo_comp" value="{{ ventas_inputs.codigo_comp }}" placeholder="Código complemento" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                    </div>
+                    {% if ventas_producto_complemento %}
+                        <input type="hidden" name="ventas_nombre_comp" value="{{ ventas_producto_complemento.nombre }}">
+                        <p class="text-xs text-gray-500 bg-purple-50 border border-purple-100 rounded-md px-3 py-2">{{ ventas_producto_complemento.codigo }} - {{ ventas_producto_complemento.nombre }}{% if ventas_producto_complemento.proveedor %} · <span class="text-blue-700">{{ ventas_producto_complemento.proveedor }}</span>{% endif %}</p>
+                    {% else %}
+                        <div>
+                            <label for="combo_nombre_complemento" class="block text-xs font-medium text-gray-600">Nombre</label>
+                            <input type="text" id="combo_nombre_complemento" name="ventas_nombre_comp" value="{{ ventas_inputs.nombre_complemento }}" placeholder="Nombre del complemento" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                        </div>
+                    {% endif %}
+                    <div>
+                        <label for="combo_precio_complemento" class="block text-xs font-medium text-gray-600">Precio unitario ($)</label>
+                        <input type="text" id="combo_precio_complemento" name="combo_precio_complemento" value="{{ ventas_inputs.precio_comp }}" placeholder="Ej: 1200" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label for="combo_cantidad_complemento" class="block text-xs font-medium text-gray-600">Cantidad</label>
+                            <input type="text" id="combo_cantidad_complemento" name="combo_cantidad_complemento" value="{{ ventas_inputs.combo_cantidad_complemento }}" placeholder="Ej: 10" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-sm">
+                        </div>
+                        <div>
+                            <label for="combo_monto_complemento" class="block text-xs font-medium text-purple-700">💵 Monto ($)</label>
+                            <input type="text" id="combo_monto_complemento" name="combo_monto_complemento" value="{{ ventas_inputs.combo_monto_complemento }}" placeholder="Dinero" class="mt-1 block w-full rounded-md border-purple-200 shadow-sm focus:border-purple-500 focus:ring-purple-500 text-sm bg-purple-50/30">
+                        </div>
+                    </div>
+                </div>
+        </div>
+        <div class="bg-gray-50 rounded-lg p-3 text-xs text-gray-600 border border-gray-200">
+            <p class="font-semibold text-gray-700 mb-1">ℹ️ Instrucciones:</p>
+            <p>• Ingresá <strong>cantidad</strong> si sabés cuántas unidades necesita el cliente</p>
+            <p>• Ingresá <strong>monto</strong> si el cliente tiene un presupuesto y querés saber cuántas unidades dar</p>
+            <p class="mt-1 text-purple-700">⚠️ Si ingresás ambos (cantidad y monto), se calculará por cantidad y se ignorará el monto</p>
+            <p class="mt-2 text-green-700 font-semibold">💰 <strong>Presupuesto total:</strong> Si ponés el <strong>mismo monto</strong> en ambos productos (ej: 3.000 en ambos), el sistema calculará la mejor combinación que no supere ese presupuesto total. Usa formato argentino: <code>3.000</code> o <code>3000</code></p>
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-purple-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-purple-700">Calcular venta combinada</button>
+            <span class="text-xs text-gray-500">Definí las cantidades por combo y opcionalmente un monto disponible.</span>
+        </div>
+    </form>
+    {% if ventas_resultado_combo %}
+    <div class="rounded-md border border-purple-200 bg-purple-50 p-4 text-sm text-purple-900 space-y-3">
+            <p class="font-semibold text-purple-900">Resumen de la operación</p>
+            
+            {% if ventas_resultado_combo.modo == 'presupuesto_total' %}
+                <div class="bg-green-50 border border-green-200 rounded-md p-3 mb-3">
+                    <p class="text-sm font-semibold text-green-800">💰 Cálculo con presupuesto total</p>
+                    <p class="text-xs">Presupuesto disponible: <strong>${{ formatear_precio(ventas_resultado_combo.presupuesto_total) }}</strong></p>
+                    <p class="text-xs">Total gastado: <strong>${{ formatear_precio(ventas_resultado_combo.total) }}</strong></p>
+                    {% if ventas_resultado_combo.resto_total > 0 %}
+                        <p class="text-xs text-green-700">💵 Vuelto: <strong>${{ formatear_precio(ventas_resultado_combo.resto_total) }}</strong></p>
+                    {% else %}
+                        <p class="text-xs text-green-700">✓ Se utilizó exactamente el presupuesto</p>
+                    {% endif %}
+                </div>
+                
+                {% if ventas_resultado_combo.variantes and ventas_resultado_combo.variantes|length > 1 %}
+                <div class="bg-blue-50 border border-blue-200 rounded-md p-4 mb-3">
+                    <p class="text-sm font-semibold text-blue-900 mb-2">🔄 Opciones disponibles ({{ ventas_resultado_combo.variantes|length }} variantes)</p>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-xs border-collapse">
+                            <thead>
+                                <tr class="bg-blue-100">
+                                    <th class="border border-blue-200 px-2 py-1 text-left">#</th>
+                                    <th class="border border-blue-200 px-2 py-1 text-left">{{ ventas_resultado_combo.producto_principal.nombre[:20] }}...</th>
+                                    <th class="border border-blue-200 px-2 py-1 text-left">{{ ventas_resultado_combo.producto_complemento.nombre[:20] }}...</th>
+                                    <th class="border border-blue-200 px-2 py-1 text-right">Total</th>
+                                    <th class="border border-blue-200 px-2 py-1 text-right">Vuelto</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for var in ventas_resultado_combo.variantes %}
+                                <tr class="{% if loop.first %}bg-green-100 font-semibold{% elif var.es_balanceado %}bg-yellow-50{% else %}bg-white{% endif %} hover:bg-blue-50">
+                                    <td class="border border-blue-200 px-2 py-1">
+                                        {% if loop.first %}
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-600 text-white">✓ Mejor</span>
+                                        {% elif var.es_balanceado %}
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-yellow-500 text-white">⚖️ Balanceado</span>
+                                        {% else %}
+                                            {{ var.opcion }}
+                                        {% endif %}
+                                    </td>
+                                    <td class="border border-blue-200 px-2 py-1">
+                                        <span class="font-semibold">{{ var.cant_principal|int }}</span> × ${{ formatear_precio(ventas_resultado_combo.precio_principal) }}
+                                        <span class="text-gray-500">= ${{ formatear_precio(var.subtotal_principal) }}</span>
+                                    </td>
+                                    <td class="border border-blue-200 px-2 py-1">
+                                        <span class="font-semibold">{{ var.cant_complemento|int }}</span> × ${{ formatear_precio(ventas_resultado_combo.precio_complemento) }}
+                                        <span class="text-gray-500">= ${{ formatear_precio(var.subtotal_complemento) }}</span>
+                                    </td>
+                                    <td class="border border-blue-200 px-2 py-1 text-right font-semibold">${{ formatear_precio(var.total) }}</td>
+                                    <td class="border border-blue-200 px-2 py-1 text-right {% if var.resto > 0 %}text-green-700{% else %}text-gray-500{% endif %}">
+                                        {% if var.resto > 0 %}
+                                            ${{ formatear_precio(var.resto) }}
+                                        {% else %}
+                                            -
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="text-xs text-blue-700 mt-2 space-y-1">
+                        <p>💡 <strong>✓ Mejor:</strong> Opción que aprovecha más el presupuesto</p>
+                        <p>⚖️ <strong>Balanceado:</strong> Cantidades iguales o muy similares (diferencia menor al 20%)</p>
+                    </div>
+                </div>
+                {% endif %}
+            {% endif %}
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-1">
+                    <p class="font-semibold text-gray-900">{{ ventas_resultado_combo.producto_principal.nombre }} ({{ ventas_resultado_combo.producto_principal.codigo }})</p>
+                    {% if ventas_resultado_combo.producto_principal.proveedor %}
+                        <p class="text-xs text-blue-700">Proveedor: {{ ventas_resultado_combo.producto_principal.proveedor }}</p>
+                    {% endif %}
+                    <p>Cantidad: <strong>{{ '%.0f'|format(ventas_resultado_combo.cantidad_principal) }}</strong></p>
+                    <p>Precio unitario: ${{ formatear_precio(ventas_resultado_combo.precio_principal) }}</p>
+                    <p>Subtotal: ${{ formatear_precio(ventas_resultado_combo.subtotal_principal) }}</p>
+                    {% if ventas_resultado_combo.monto_principal %}
+                        <p class="text-xs text-indigo-700">💵 Monto recibido: ${{ formatear_precio(ventas_resultado_combo.monto_principal) }}</p>
+                        {% if ventas_resultado_combo.resto_principal > 0 %}
+                            <p class="text-xs text-indigo-700">💰 Vuelto: ${{ formatear_precio(ventas_resultado_combo.resto_principal) }}</p>
+                        {% endif %}
+                    {% endif %}
+                </div>
+                <div class="space-y-1">
+                    <p class="font-semibold text-gray-900">{{ ventas_resultado_combo.producto_complemento.nombre }} ({{ ventas_resultado_combo.producto_complemento.codigo }})</p>
+                    {% if ventas_resultado_combo.producto_complemento.proveedor %}
+                        <p class="text-xs text-blue-700">Proveedor: {{ ventas_resultado_combo.producto_complemento.proveedor }}</p>
+                    {% endif %}
+                    <p>Cantidad: <strong>{{ '%.0f'|format(ventas_resultado_combo.cantidad_complemento) }}</strong></p>
+                    <p>Precio unitario: ${{ formatear_precio(ventas_resultado_combo.precio_complemento) }}</p>
+                    <p>Subtotal: ${{ formatear_precio(ventas_resultado_combo.subtotal_complemento) }}</p>
+                    {% if ventas_resultado_combo.monto_complemento %}
+                        <p class="text-xs text-purple-700">💵 Monto recibido: ${{ formatear_precio(ventas_resultado_combo.monto_complemento) }}</p>
+                        {% if ventas_resultado_combo.resto_complemento > 0 %}
+                            <p class="text-xs text-purple-700">💰 Vuelto: ${{ formatear_precio(ventas_resultado_combo.resto_complemento) }}</p>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            <p class="mt-2 text-base font-semibold text-gray-900">Total venta combinada: ${{ formatear_precio(ventas_resultado_combo.total) }}</p>
+    </div>
+    {% endif %}
+</div>
+
+{% if ventas_busqueda_resultados %}
+<div class="mt-6 rounded-lg border border-gray-200 bg-gray-50 p-3">
+    <div class="space-y-3 max-h-96 overflow-y-auto pr-2">
+        {% for producto in ventas_busqueda_resultados %}
+        {% set es_principal = ventas_inputs.codigo == producto.codigo %}
+        {% set es_complemento = ventas_inputs.codigo_comp == producto.codigo %}
+        <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between border rounded-lg bg-white shadow-sm px-4 py-3">
+            <div class="space-y-1 text-sm text-gray-700">
+                <p><strong>Código:</strong> {{ producto.codigo }}</p>
+                <p><strong>Nombre:</strong> {{ producto.nombre }}</p>
+                {% if producto.proveedor %}
+                <p><strong>Proveedor:</strong> <span class="text-blue-600">{{ producto.proveedor }}</span></p>
+                {% endif %}
+                <p><strong>Precio unitario:</strong>
+                    {% if producto.precio_valido %}
+                        ${{ formatear_precio(producto.precio) }}
+                    {% else %}
+                        <span class="text-red-600">Sin precio válido (ingresá manualmente)</span>
+                    {% endif %}
+                </p>
+                {% if es_principal or es_complemento %}
+                <div class="flex flex-wrap gap-2 pt-1">
+                    {% if es_principal %}
+                        <span class="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-800">Principal actual</span>
+                    {% endif %}
+                    {% if es_complemento %}
+                        <span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800">Complemento actual</span>
+                    {% endif %}
+                </div>
+                {% endif %}
+            </div>
+            <div class="flex flex-col gap-2 md:items-end">
+                <form method="post" class="flex-shrink-0">
+                    <input type="hidden" name="formulario" value="ventas_avanzadas_select">
+                    <input type="hidden" class="active_tab_input" name="active_tab" value="ventas_avanzadas">
+                    <input type="hidden" name="ventas_busqueda" value="{{ ventas_busqueda_query }}">
+                    <input type="hidden" name="ventas_page" value="{{ ventas_busqueda_page }}">
+                    <input type="hidden" name="ventas_codigo_comp" value="{{ ventas_inputs.codigo_comp }}">
+                    <input type="hidden" name="ventas_nombre_comp" value="{{ ventas_inputs.nombre_complemento }}">
+                    <input type="hidden" name="combo_precio_complemento" value="{{ ventas_inputs.precio_comp }}">
+                    <input type="hidden" name="combo_cantidad_complemento" value="{{ ventas_inputs.combo_cantidad_complemento }}">
+                    <input type="hidden" name="combo_cantidad_principal" value="{{ ventas_inputs.combo_cantidad_principal }}">
+                    <input type="hidden" name="combo_precio_principal" value="{{ ventas_inputs.precio }}">
+                    <input type="hidden" name="ventas_monto" value="{{ ventas_inputs.monto }}">
+                    <input type="hidden" name="ventas_cantidad" value="{{ ventas_inputs.cantidad }}">
+                    <input type="hidden" name="ventas_select_codigo" value="{{ producto.codigo }}">
+                    <input type="hidden" name="ventas_select_nombre" value="{{ producto.nombre }}">
+                    <input type="hidden" name="ventas_select_precio" value="{{ producto.precio if (producto.precio_valido or (producto.precio and producto.precio > 0)) else '' }}">
+                    <input type="hidden" name="ventas_select_proveedor" value="{{ producto.proveedor if producto.proveedor else '' }}">
+                    <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-blue-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-blue-700">Usar como principal</button>
+                </form>
+                <form method="post" class="flex-shrink-0">
+                    <input type="hidden" name="formulario" value="ventas_avanzadas_select_complemento">
+                    <input type="hidden" class="active_tab_input" name="active_tab" value="ventas_avanzadas">
+                    <input type="hidden" name="ventas_busqueda" value="{{ ventas_busqueda_query }}">
+                    <input type="hidden" name="ventas_page" value="{{ ventas_busqueda_page }}">
+                    <input type="hidden" name="ventas_codigo" value="{{ ventas_inputs.codigo }}">
+                    <input type="hidden" name="ventas_nombre" value="{{ ventas_inputs.nombre_principal }}">
+                    <input type="hidden" name="combo_precio_principal" value="{{ ventas_inputs.precio }}">
+                    <input type="hidden" name="combo_cantidad_principal" value="{{ ventas_inputs.combo_cantidad_principal }}">
+                    <input type="hidden" name="combo_precio_complemento" value="{{ ventas_inputs.precio_comp }}">
+                    <input type="hidden" name="combo_cantidad_complemento" value="{{ ventas_inputs.combo_cantidad_complemento }}">
+                    <input type="hidden" name="ventas_monto" value="{{ ventas_inputs.monto }}">
+                    <input type="hidden" name="ventas_cantidad" value="{{ ventas_inputs.cantidad }}">
+                    <input type="hidden" name="ventas_select_codigo" value="{{ producto.codigo }}">
+                    <input type="hidden" name="ventas_select_nombre" value="{{ producto.nombre }}">
+                    <input type="hidden" name="ventas_select_precio" value="{{ producto.precio if (producto.precio_valido or (producto.precio and producto.precio > 0)) else '' }}">
+                    <input type="hidden" name="ventas_select_proveedor" value="{{ producto.proveedor if producto.proveedor else '' }}">
+                    <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-purple-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-purple-700">Usar como complemento</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+<p class="mt-2 text-xs text-gray-500">Mostrando {{ ((ventas_busqueda_page - 1) * ventas_resultados_por_pagina) + 1 }} - {{ ((ventas_busqueda_page - 1) * ventas_resultados_por_pagina) + (ventas_busqueda_resultados|length) }} de {{ ventas_busqueda_total_resultados }} resultado(s).</p>
+{% elif ventas_busqueda_query %}
+<p class="mt-4 text-sm text-gray-500">No se encontraron productos que coincidan con "{{ ventas_busqueda_query }}".</p>
+{% endif %}
+
+{% if ventas_busqueda_total_paginas > 1 %}
+<div class="mt-4 flex flex-wrap items-center gap-3 text-sm text-gray-600">
+    {% if ventas_busqueda_page > 1 %}
+    <form method="post" class="inline">
+        <input type="hidden" name="formulario" value="ventas_avanzadas_buscar">
+        <input type="hidden" class="active_tab_input" name="active_tab" value="ventas_avanzadas">
+        <input type="hidden" name="ventas_busqueda" value="{{ ventas_busqueda_query }}">
+        <input type="hidden" name="ventas_page" value="{{ ventas_busqueda_page - 1 }}">
+        <button type="submit" class="rounded-md border border-gray-300 bg-white px-3 py-1 hover:bg-gray-100">⟵ Anterior</button>
+    </form>
+    {% endif %}
+    <span>Página {{ ventas_busqueda_page }} de {{ ventas_busqueda_total_paginas }}</span>
+    {% if ventas_busqueda_page < ventas_busqueda_total_paginas %}
+    <form method="post" class="inline">
+        <input type="hidden" name="formulario" value="ventas_avanzadas_buscar">
+        <input type="hidden" class="active_tab_input" name="active_tab" value="ventas_avanzadas">
+        <input type="hidden" name="ventas_busqueda" value="{{ ventas_busqueda_query }}">
+        <input type="hidden" name="ventas_page" value="{{ ventas_busqueda_page + 1 }}">
+        <button type="submit" class="rounded-md border border-gray-300 bg-white px-3 py-1 hover:bg-gray-100">Siguiente ⟶</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
+
+{% if ventas_operaciones %}
+<div class="mt-6 border rounded-lg bg-white shadow-sm p-4">
+    <div class="flex items-center justify-between">
+        <h3 class="text-lg font-semibold text-gray-900">Operaciones recientes</h3>
+        <span class="text-xs text-gray-500">Mostrando últimas {{ ventas_operaciones|length }} operación(es)</span>
+    </div>
+    <form method="post" class="mt-3 space-y-4">
+        <input type="hidden" name="formulario" value="ventas_operaciones_manage">
+        <input type="hidden" class="active_tab_input" name="active_tab" value="ventas_avanzadas">
+        <input type="hidden" name="ventas_busqueda" value="{{ ventas_busqueda_query }}">
+        <input type="hidden" name="ventas_page" value="{{ ventas_busqueda_page }}">
+        <input type="hidden" name="ventas_codigo" value="{{ ventas_inputs.codigo }}">
+        <input type="hidden" name="ventas_nombre" value="{{ ventas_inputs.nombre_principal }}">
+        <input type="hidden" name="combo_precio_principal" value="{{ ventas_inputs.precio }}">
+        <input type="hidden" name="combo_cantidad_principal" value="{{ ventas_inputs.combo_cantidad_principal }}">
+        <input type="hidden" name="combo_monto_principal" value="{{ ventas_inputs.combo_monto_principal }}">
+        <input type="hidden" name="ventas_codigo_comp" value="{{ ventas_inputs.codigo_comp }}">
+        <input type="hidden" name="ventas_nombre_comp" value="{{ ventas_inputs.nombre_complemento }}">
+        <input type="hidden" name="combo_precio_complemento" value="{{ ventas_inputs.precio_comp }}">
+        <input type="hidden" name="combo_cantidad_complemento" value="{{ ventas_inputs.combo_cantidad_complemento }}">
+        <input type="hidden" name="combo_monto_complemento" value="{{ ventas_inputs.combo_monto_complemento }}">
+        <input type="hidden" name="ventas_precio" value="{{ ventas_inputs.precio }}">
+        <input type="hidden" name="ventas_precio_comp" value="{{ ventas_inputs.precio_comp }}">
+        <input type="hidden" name="ventas_monto" value="{{ ventas_inputs.monto }}">
+        <input type="hidden" name="ventas_cantidad" value="{{ ventas_inputs.cantidad }}">
+        <input type="hidden" name="combo_monto_disponible" value="{{ ventas_inputs.combo_monto_disponible }}">
+        <div class="max-h-60 overflow-y-auto pr-2 space-y-3">
+            {% for operacion in ventas_operaciones|reverse %}
+            <div class="border rounded-md bg-gray-50 px-3 py-2 text-sm text-gray-700">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex-1 space-y-2">
+                        <div class="flex items-center gap-2 text-xs text-gray-500">
+                            <span>{{ operacion.timestamp }}</span>
+                            <span class="uppercase font-semibold">{{ operacion.tipo }}</span>
+                        </div>
+                        {% if operacion.tipo == 'combo' %}
+                            {% set productos_combo = operacion.productos or [] %}
+                            {% if productos_combo %}
+                                {% set principal = productos_combo[0] %}
+                                {% set complemento = productos_combo[1] if productos_combo|length > 1 else None %}
+                                <p class="font-semibold text-gray-900">{{ principal.nombre }}{% if complemento %} + {{ complemento.nombre }}{% endif %}</p>
+                                {% if complemento %}
+                                    <p class="text-xs text-gray-500">({{ principal.nombre }} + {{ complemento.nombre }})</p>
+                                {% endif %}
+                                
+                                {% if operacion.modo == 'monto' %}
+                                    <div class="mt-2 bg-purple-50 rounded-md px-2 py-1 text-xs border border-purple-200">
+                                        <p class="font-semibold text-purple-800">Por monto disponible</p>
+                                        <p>Monto: ${{ formatear_precio(operacion.monto_disponible) }}</p>
+                                        <p>Precio combo: ${{ formatear_precio(operacion.precio_combo) }}</p>
+                                        <p>Combos entregados: <strong>{{ operacion.combos }}</strong> (exactos: {{ '%.2f'|format(operacion.combos_exactos) }})</p>
+                                        {% if operacion.resto > 0 %}
+                                            <p>Sobra: ${{ formatear_precio(operacion.resto) }}</p>
+                                        {% endif %}
+                                    </div>
+                                {% endif %}
+                                
+                                <ul class="mt-2 space-y-1 text-xs text-gray-600">
+                                    {% for item in productos_combo %}
+                                    <li class="rounded-md border border-dashed border-purple-200 bg-white/70 px-2 py-1">
+                                        <strong>{{ item.nombre }}</strong> ({{ item.codigo }})
+                                        {% if operacion.modo == 'monto' %}
+                                            — Por combo: {{ '%.0f'|format(item.cantidad_por_combo) }}
+                                            — Total: {{ '%.0f'|format(item.cantidad) }}
+                                        {% else %}
+                                            — Cant: {{ '%.2f'|format(item.cantidad) }}
+                                        {% endif %}
+                                        — Precio: ${{ formatear_precio(item.precio) }}
+                                        — Subtotal: ${{ formatear_precio(item.subtotal) }}
+                                    </li>
+                                    {% endfor %}
+                                </ul>
+                                <p class="mt-2 text-sm font-semibold text-purple-900">Total combinado: ${{ formatear_precio(operacion.total) }}</p>
+                            {% endif %}
+                        {% else %}
+                            <p class="font-semibold text-gray-900">{{ operacion.producto.nombre }} ({{ operacion.producto.codigo }})</p>
+                            <p class="text-xs text-gray-500">Precio unitario: ${{ formatear_precio(operacion.producto.precio) }}</p>
+                            {% if operacion.tipo == 'monto' %}
+                                <p>Monto disponible: ${{ formatear_precio(operacion.monto) }}</p>
+                                <p>Unidades entregadas: {{ operacion.cantidad }} (exactas {{ '%.2f'|format(operacion.cantidad_exacta) }})</p>
+                                {% if operacion.resto %}
+                                    <p>Sobra: ${{ formatear_precio(operacion.resto) }}</p>
+                                {% endif %}
+                            {% else %}
+                                <p>Cantidad solicitada: {{ '%.2f'|format(operacion.cantidad) }}</p>
+                                <p>Total a cobrar: ${{ formatear_precio(operacion.total) }}</p>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    <div class="pt-1">
+                        <input type="checkbox" name="ventas_operaciones_ids" value="{{ operacion.id }}" class="h-4 w-4 rounded border-gray-300 text-purple-600 focus:ring-purple-500">
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div class="flex flex-wrap items-center gap-3">
+            <button type="submit" name="accion" value="seleccionados" class="inline-flex justify-center rounded-md border border-transparent bg-red-500 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-red-600">Borrar seleccionados</button>
+            <button type="submit" name="accion" value="todo" class="inline-flex justify-center rounded-md border border-red-200 bg-white py-2 px-4 text-sm font-medium text-red-600 shadow-sm hover:bg-red-50">Borrar todo</button>
+        </div>
+    </form>
+</div>
+{% endif %}
+
+{% else %}
+<div class="p-6 border border-dashed border-gray-300 rounded-lg bg-gray-50 text-gray-700 space-y-2">
+    <p>{{ productos_manual_error or 'No se pudieron cargar los productos manuales.' }}</p>
+    <p class="text-xs text-gray-500">Verifica que el archivo 'productos_manual.xlsx' esté en la carpeta listas_excel con Código en columna A, Proveedor en columna B, Nombre en columna C y Precio en columna D.</p>
+</div>
+{% endif %}

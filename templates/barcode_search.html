@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-900">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Búsqueda por Código de Barras</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-full text-white">
+    <div class="min-h-full flex flex-col items-center py-8 px-4">
+        <div class="w-full max-w-5xl">
+            <header class="text-center">
+                <h1 class="text-4xl font-bold tracking-wide">🔍 Escáner de Códigos de Barras</h1>
+                <p class="mt-2 text-lg text-slate-300">Escaneá el código, validamos los últimos 4 dígitos clave y buscamos en las listas de precios.</p>
+                
+                {% if modo_barcode_inteligente %}
+                <div class="mt-4 inline-flex items-center px-4 py-2 rounded-full bg-blue-600/20 border border-blue-400/40">
+                    <svg class="h-5 w-5 mr-2 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                    </svg>
+                    <span class="text-sm font-semibold text-blue-300">Modo Inteligente Enhanced: 12 dígitos → Crossmaster | 13 dígitos → Todos</span>
+                </div>
+                {% else %}
+                <div class="mt-4 inline-flex items-center px-4 py-2 rounded-full bg-gray-600/20 border border-gray-400/40">
+                    <svg class="h-5 w-5 mr-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+                    </svg>
+                    <span class="text-sm font-semibold text-gray-300">Modo Clásico: Búsqueda estándar</span>
+                </div>
+                {% endif %}
+            </header>
+
+            <section class="mt-8 bg-white/10 backdrop-blur rounded-3xl shadow-xl border border-white/10">
+                <form method="POST" class="p-8 space-y-6">
+                    <div>
+                        <label for="barcode" class="block text-lg font-semibold text-slate-200">Código de barras completo</label>
+                        <input type="text" id="barcode" name="barcode" value="{{ barcode_input }}" autofocus autocomplete="off" placeholder="Escaneá o escribí el código" class="mt-3 w-full rounded-2xl border border-white/20 bg-white/10 px-6 py-5 text-3xl font-semibold tracking-widest text-white shadow-inner focus:border-amber-400 focus:outline-none focus:ring focus:ring-amber-400/40">
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div class="lg:col-span-2">
+                            <label for="proveedor" class="block text-lg font-semibold text-slate-200">Filtrar por proveedor (opcional)</label>
+                            <select id="proveedor" name="proveedor" class="mt-3 w-full rounded-2xl border border-white/20 bg-white/10 px-5 py-4 text-xl text-white focus:border-amber-400 focus:outline-none focus:ring focus:ring-amber-400/40">
+                                <option value="" {% if not proveedor_filtro %}selected{% endif %} class="bg-slate-800 text-white">Todos los proveedores</option>
+                                {% for nombre in lista_proveedores %}
+                                    <option value="{{ nombre }}" {% if nombre == proveedor_filtro %}selected{% endif %} class="bg-slate-800 text-white">{{ nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button type="submit" class="w-full rounded-2xl bg-amber-500 px-6 py-4 text-2xl font-semibold text-slate-900 shadow-lg shadow-amber-500/40 transition hover:bg-amber-400">Buscar</button>
+                        </div>
+                    </div>
+
+                    {% if codigo_patron %}
+                    <div class="rounded-2xl bg-slate-800/80 px-6 py-4 text-center text-lg text-amber-200 border border-amber-400/40">
+                        Patrón de búsqueda derivado: <span class="font-bold text-2xl tracking-[0.5rem]">{{ codigo_patron }}</span>
+                    </div>
+                    {% endif %}
+                </form>
+            </section>
+
+            {% if mensaje %}
+            <div class="mt-6 rounded-2xl border border-white/10 bg-white/10 px-6 py-4 text-center text-xl font-semibold text-white">
+                {{ mensaje }}
+            </div>
+            {% endif %}
+
+            {% if resultados %}
+            <section class="mt-8 space-y-6">
+                {% for producto in resultados %}
+                <article class="rounded-3xl border border-white/10 bg-slate-800/80 p-6 shadow-xl">
+                    <header class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h2 class="text-2xl font-bold text-white">{{ producto.producto or 'Producto sin nombre' }}</h2>
+                            <p class="text-lg text-amber-200 font-semibold tracking-wide">Código interno: {{ producto.codigo }}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-sm uppercase text-slate-400">Proveedor</p>
+                            <p class="text-xl font-semibold text-indigo-200">{{ producto.proveedor }}</p>
+                            {% if producto.fuente %}
+                            <span class="inline-flex items-center mt-1 px-3 py-1 rounded-full text-sm font-semibold border border-white/20"
+                                  style="background: linear-gradient(to right, rgba(59,130,246,0.15), rgba(99,102,241,0.15));">
+                                Fuente: {{ producto.fuente }}
+                            </span>
+                            {% endif %}
+                            {% if producto.archivo or producto.fecha_archivo %}
+                            <div class="mt-1 text-sm text-slate-400">
+                                {% if producto.archivo %}<span class="inline-block">Archivo: {{ producto.archivo }}</span>{% endif %}
+                                {% if producto.fecha_archivo %}<span class="inline-block ml-2">Fecha: {{ producto.fecha_archivo }}</span>{% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </header>
+
+                    <div class="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div class="rounded-2xl bg-white/5 p-4">
+                            <p class="text-sm uppercase text-slate-400">IVA</p>
+                            <p class="text-2xl font-semibold text-white">{{ producto.iva }}</p>
+                        </div>
+                        {% if producto.precios %}
+                        <div class="rounded-2xl bg-white/5 p-4 lg:col-span-2">
+                            <p class="text-sm uppercase text-slate-400 mb-3">Precios</p>
+                            
+                            {# Preparar variables para precios destacados #}
+                            {% set precios_ns = namespace(
+                                venta=None, lista=None, neto=None, neto_unit=None,
+                                principal=None, otros=[]
+                            ) %}
+                            
+                            {# Clasificar precios #}
+                            {% for titulo, valor in producto.precios.items() if valor not in (None, '') %}
+                                {% set titulo_lower = titulo|lower %}
+                                {% if titulo_lower in ['precio de venta', 'precio venta'] %}
+                                    {% set precios_ns.venta = {'titulo': titulo, 'valor': valor} %}
+                                {% elif titulo_lower in ['precio de lista', 'precio lista'] %}
+                                    {% set precios_ns.lista = {'titulo': titulo, 'valor': valor} %}
+                                {% elif titulo_lower == 'precio neto' %}
+                                    {% set precios_ns.neto = {'titulo': titulo, 'valor': valor} %}
+                                {% elif titulo_lower == 'precio neto unitario' %}
+                                    {% set precios_ns.neto_unit = {'titulo': titulo, 'valor': valor} %}
+                                {% else %}
+                                    {# Si no hay precio principal aún, este es el primero (para otros proveedores) #}
+                                    {% if precios_ns.principal is none and precios_ns.venta is none %}
+                                        {% set precios_ns.principal = {'titulo': titulo, 'valor': valor} %}
+                                    {% else %}
+                                        {% set _ = precios_ns.otros.append({'titulo': titulo, 'valor': valor}) %}
+                                    {% endif %}
+                                {% endif %}
+                            {% endfor %}
+                            
+                            {# Layout de dos columnas para precios destacados #}
+                            {% if precios_ns.venta or precios_ns.lista or precios_ns.neto or precios_ns.neto_unit %}
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                                {# Columna izquierda #}
+                                <div class="space-y-2">
+                                    {% if precios_ns.venta %}
+                                    <div class="flex justify-between items-baseline">
+                                        <span class="text-lg text-slate-300">{{ precios_ns.venta.titulo }}</span>
+                                        <span class="font-bold text-3xl text-emerald-300">${{ formatear_precio(precios_ns.venta.valor) }}</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if precios_ns.lista %}
+                                    <div class="flex justify-between items-baseline">
+                                        <span class="text-lg text-slate-300">{{ precios_ns.lista.titulo }}</span>
+                                        <span class="font-bold text-3xl text-emerald-300">${{ formatear_precio(precios_ns.lista.valor) }}</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                                
+                                {# Columna derecha #}
+                                <div class="space-y-2">
+                                    {% if precios_ns.neto %}
+                                    <div class="flex justify-between items-baseline">
+                                        <span class="text-lg text-slate-300">{{ precios_ns.neto.titulo }}</span>
+                                        <span class="font-semibold text-2xl text-emerald-300">${{ formatear_precio(precios_ns.neto.valor) }}</span>
+                                    </div>
+                                    {% endif %}
+                                    {% if precios_ns.neto_unit %}
+                                    <div class="flex justify-between items-baseline">
+                                        <span class="text-lg text-slate-300">{{ precios_ns.neto_unit.titulo }}</span>
+                                        <span class="font-semibold text-2xl text-emerald-300">${{ formatear_precio(precios_ns.neto_unit.valor) }}</span>
+                                    </div>
+                                    {% endif %}
+                                </div>
+                            </div>
+                            {% elif precios_ns.principal %}
+                            {# Para otros proveedores, mostrar el precio principal grande #}
+                            <div class="mb-3">
+                                <div class="flex justify-between items-baseline">
+                                    <span class="text-xl text-slate-300">{{ precios_ns.principal.titulo }}</span>
+                                    <span class="font-bold text-4xl text-emerald-300">${{ formatear_precio(precios_ns.principal.valor) }}</span>
+                                </div>
+                            </div>
+                            {% endif %}
+                            
+                            {# Otros precios (si hay) #}
+                            {% if precios_ns.otros %}
+                            <div class="mt-3 pt-3 border-t border-white/10">
+                                <ul class="space-y-1 text-white">
+                                    {% for item in precios_ns.otros %}
+                                        <li class="flex justify-between text-lg">
+                                            <span class="text-slate-300">{{ item.titulo }}</span>
+                                            <span class="font-semibold text-emerald-300">${{ formatear_precio(item.valor) }}</span>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    {% if producto.extra_datos %}
+                    <div class="mt-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+                        <p class="text-sm uppercase text-slate-400">Datos adicionales</p>
+                        <dl class="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-lg text-white">
+                            {% for titulo, valor in producto.extra_datos.items() if valor not in (None, '') %}
+                                <div class="flex justify-between"><dt class="text-slate-300">{{ titulo }}</dt><dd class="font-semibold">{{ valor }}</dd></div>
+                            {% endfor %}
+                        </dl>
+                    </div>
+                    {% endif %}
+                </article>
+                {% endfor %}
+            </section>
+            {% elif mensaje %}
+            <div class="mt-8 text-center text-lg text-slate-300">
+                Probá escanear nuevamente para verificar el código o ajustá el filtro de proveedor.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <script>
+        const form = document.querySelector('form');
+        const input = document.getElementById('barcode');
+        let inputStartTime = null;
+        let lastLength = 0;
+        const scannerThreshold = 100; // Si escribe más de X caracteres en menos de 100ms, es un escáner
+        
+        if (input) {
+            // Auto-focus y seleccionar todo al cargar
+            input.focus();
+            input.select();
+            
+            // Cuando el input recibe foco, seleccionar todo el texto
+            input.addEventListener('focus', () => input.select());
+            
+            // Detectar entrada rápida (escáner) vs entrada manual
+            input.addEventListener('input', function() {
+                const currentTime = Date.now();
+                const currentLength = this.value.length;
+                
+                // Si es el primer caracter, iniciar timer
+                if (lastLength === 0 && currentLength > 0) {
+                    inputStartTime = currentTime;
+                    lastLength = currentLength;
+                    return;
+                }
+                
+                // Si se ingresaron muchos caracteres muy rápido, es un escáner
+                const charactersAdded = currentLength - lastLength;
+                const timeDiff = inputStartTime ? currentTime - inputStartTime : 0;
+                
+                // Escáner detectado: más de 8 caracteres en menos de 100ms
+                if (charactersAdded >= 8 && timeDiff < scannerThreshold && currentLength >= 4) {
+                    console.log('Escáner detectado - Auto-búsqueda activada');
+                    // Pequeño delay para asegurar que terminó de escanear
+                    setTimeout(() => {
+                        form.submit();
+                    }, 50);
+                }
+                
+                lastLength = currentLength;
+            });
+            
+            // Reset cuando se borra todo
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Backspace' || e.key === 'Delete') {
+                    if (this.value.length <= 1) {
+                        inputStartTime = null;
+                        lastLength = 0;
+                    }
+                }
+                
+                // Enter para búsqueda manual
+                if (e.key === 'Enter') {
+                    inputStartTime = null;
+                    lastLength = 0;
+                    // El form ya se enviará por el comportamiento default
+                }
+            });
+            
+            // Detectar pegado (Ctrl+V o clic derecho)
+            input.addEventListener('paste', function() {
+                console.log('Pegado detectado - Auto-búsqueda activada');
+                setTimeout(() => {
+                    if (this.value.trim().length >= 4) {
+                        form.submit();
+                    }
+                }, 50);
+            });
+        }
+    </script>
+</body>
+</html>

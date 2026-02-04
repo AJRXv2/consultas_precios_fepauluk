@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-gray-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configuración - Calculadora de Precios</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="h-full">
+    <div class="min-h-full">
+        <div class="bg-gray-800 pb-32">
+            <header class="py-6">
+                <div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 flex items-center justify-between">
+                    <div>
+                        <h1 class="text-3xl font-bold tracking-tight text-white">Configuración del Sistema</h1>
+                        <p class="text-gray-400 mt-1">Ferretería Pauluk</p>
+                    </div>
+                    <div class="flex items-center gap-4 text-sm">
+                        <a href="/" class="text-indigo-200 hover:text-white underline">← Volver al Inicio</a>
+                        {% if request.current_user %}
+                            <span class="text-gray-300">👤 {{ request.current_user }}</span>
+                            <a href="/logout" class="text-red-300 hover:text-red-200 underline">Salir</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </header>
+        </div>
+
+        <main class="-mt-32">
+            <div class="mx-auto max-w-4xl px-4 pb-12 sm:px-6 lg:px-8">
+                <div class="bg-white rounded-lg shadow px-6 py-8">
+                    
+                    {% if mensaje %}
+                        <div class="mb-6 rounded-md {% if exito %}bg-green-50{% else %}bg-yellow-50{% endif %} p-4">
+                            <div class="flex">
+                                <div class="ml-3">
+                                    <p class="text-sm font-medium {% if exito %}text-green-800{% else %}text-yellow-800{% endif %}">{{ mensaje }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    {% endif %}
+
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6">Información de Base de Datos</h2>
+                    
+                    <div class="bg-gray-50 rounded-lg p-6 mb-8">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-500 mb-2">Tipo de Base de Datos</h3>
+                                <p class="text-lg font-semibold text-gray-900">
+                                    {% if config_info.db_tipo %}
+                                        {{ config_info.db_tipo }}
+                                    {% else %}
+                                        <span class="text-gray-400">No configurada</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-500 mb-2">Estado de Conexión</h3>
+                                <p class="text-lg font-semibold">
+                                    {% if config_info.db_conectada %}
+                                        <span class="text-green-600">✓ Conectada</span>
+                                    {% else %}
+                                        <span class="text-red-600">✗ No conectada</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-500 mb-2">Búsqueda en DB (Listas)</h3>
+                                <p class="text-lg font-semibold">
+                                    {% if config_info.listas_en_db %}
+                                        <span class="text-green-600">✓ Activada</span>
+                                    {% else %}
+                                        <span class="text-gray-400">✗ Desactivada</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            
+                            <div>
+                                <h3 class="text-sm font-medium text-gray-500 mb-2">PostgreSQL (psycopg)</h3>
+                                <p class="text-lg font-semibold">
+                                    {% if config_info.psycopg_disponible %}
+                                        <span class="text-green-600">✓ Disponible</span>
+                                    {% else %}
+                                        <span class="text-gray-400">✗ No disponible</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6">Configuración de Fallback a Excel</h2>
+                    
+                    <div class="bg-blue-50 border-l-4 border-blue-400 p-4 mb-6">
+                        <div class="flex">
+                            <div class="flex-shrink-0">
+                                <svg class="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                </svg>
+                            </div>
+                            <div class="ml-3">
+                                <p class="text-sm text-blue-700">
+                                    <strong>¿Qué es el Fallback a Excel?</strong><br>
+                                    Cuando está activado, si no se encuentran resultados en la base de datos, el sistema buscará automáticamente en los archivos Excel locales. 
+                                    Desactivar esta opción hará que el sistema <strong>solo busque en la base de datos</strong>, ignorando los archivos Excel.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-gray-50 rounded-lg p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <h3 class="text-lg font-medium text-gray-900">Estado Actual del Fallback</h3>
+                                <p class="mt-2 text-sm text-gray-600">
+                                    El fallback a Excel está actualmente:
+                                    <span class="font-bold {% if config_info.usar_fallback_excel %}text-green-600{% else %}text-red-600{% endif %}">
+                                        {% if config_info.usar_fallback_excel %}
+                                            ACTIVADO
+                                        {% else %}
+                                            DESACTIVADO
+                                        {% endif %}
+                                    </span>
+                                </p>
+                            </div>
+                            
+                            <form method="POST" action="/configuracion">
+                                <input type="hidden" name="accion" value="toggle_fallback">
+                                <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white {% if config_info.usar_fallback_excel %}bg-red-600 hover:bg-red-700{% else %}bg-green-600 hover:bg-green-700{% endif %} focus:outline-none focus:ring-2 focus:ring-offset-2 {% if config_info.usar_fallback_excel %}focus:ring-red-500{% else %}focus:ring-green-500{% endif %}">
+                                    {% if config_info.usar_fallback_excel %}
+                                        Desactivar Fallback
+                                    {% else %}
+                                        Activar Fallback
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </div>
+                        
+                        {% if config_info.usar_fallback_excel %}
+                        <div class="mt-4 p-3 bg-green-50 rounded-md">
+                            <p class="text-sm text-green-700">
+                                ✓ El sistema buscará primero en la DB y, si no encuentra resultados, buscará en archivos Excel.
+                            </p>
+                        </div>
+                        {% else %}
+                        <div class="mt-4 p-3 bg-yellow-50 rounded-md">
+                            <p class="text-sm text-yellow-700">
+                                ⚠️ El sistema <strong>solo buscará en la base de datos</strong>. Los archivos Excel serán ignorados completamente.
+                            </p>
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6 mt-8">Modo de Búsqueda por Código de Barras</h2>
+                    
+                    <div class="bg-gray-50 rounded-lg p-6">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-medium text-gray-900">Detección Automática de Tipo de Código</h3>
+                                <p class="mt-2 text-sm text-gray-600">
+                                    El modo inteligente enhanced detecta automáticamente el tipo de código de barras según su longitud:
+                                </p>
+                                <ul class="mt-3 text-sm text-gray-600 space-y-2 ml-4">
+                                    <li class="flex items-start">
+                                        <span class="text-blue-600 font-mono mr-2">•</span>
+                                        <span><strong>12 dígitos (UPC-A):</strong> Busca automáticamente solo en Crossmaster</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="text-blue-600 font-mono mr-2">•</span>
+                                        <span><strong>13 dígitos (EAN-13):</strong> Busca en todos los proveedores</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="text-gray-400 font-mono mr-2">•</span>
+                                        <span class="text-gray-500"><strong>Modo clásico:</strong> Busca en todos los proveedores sin importar la longitud</span>
+                                    </li>
+                                </ul>
+                                <div class="mt-4 p-3 {% if config_info.modo_barcode_inteligente %}bg-blue-50{% else %}bg-gray-100{% endif %} rounded-md">
+                                    <p class="text-sm font-medium {% if config_info.modo_barcode_inteligente %}text-blue-700{% else %}text-gray-700{% endif %}">
+                                        Estado actual: 
+                                        {% if config_info.modo_barcode_inteligente %}
+                                        🔍 <strong>Modo Inteligente Enhanced Activado</strong> - Detección automática habilitada
+                                        {% else %}
+                                        📋 <strong>Modo Clásico Activado</strong> - Búsqueda estándar en todos los proveedores
+                                        {% endif %}
+                                    </p>
+                                </div>
+                            </div>
+                            <form method="POST" class="ml-6">
+                                <input type="hidden" name="accion" value="toggle_barcode">
+                                <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white {% if config_info.modo_barcode_inteligente %}bg-gray-600 hover:bg-gray-700{% else %}bg-blue-600 hover:bg-blue-700{% endif %} focus:outline-none focus:ring-2 focus:ring-offset-2 {% if config_info.modo_barcode_inteligente %}focus:ring-gray-500{% else %}focus:ring-blue-500{% endif %}">
+                                    <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/>
+                                    </svg>
+                                    {% if config_info.modo_barcode_inteligente %}
+                                    Cambiar a Modo Clásico
+                                    {% else %}
+                                    Cambiar a Modo Inteligente Enhanced
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6 mt-8">Velocidad de Búsqueda de Códigos de Barras</h2>
+                    
+                    <div class="bg-gray-50 rounded-lg p-6">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-medium text-gray-900">Optimización de Búsqueda</h3>
+                                <p class="mt-2 text-sm text-gray-600">
+                                    Controla cómo se buscan las variantes de códigos de barras en la base de datos:
+                                </p>
+                                <ul class="mt-3 text-sm text-gray-600 space-y-2 ml-4">
+                                    <li class="flex items-start">
+                                        <span class="text-green-600 font-mono mr-2">⚡</span>
+                                        <span><strong>Modo Rápido (Optimizado):</strong> Busca todas las variantes en una sola consulta SQL (~2-5 segundos)</span>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="text-yellow-600 font-mono mr-2">🐢</span>
+                                        <span><strong>Modo Lento (Secuencial):</strong> Busca cada variante individualmente (~28 segundos, útil para debugging)</span>
+                                    </li>
+                                </ul>
+                                <div class="mt-4 p-3 {% if config_info.busqueda_barcode_optimizada %}bg-green-50{% else %}bg-yellow-50{% endif %} rounded-md">
+                                    <p class="text-sm font-medium {% if config_info.busqueda_barcode_optimizada %}text-green-700{% else %}text-yellow-700{% endif %}">
+                                        Estado actual: 
+                                        {% if config_info.busqueda_barcode_optimizada %}
+                                        ⚡ <strong>Modo Rápido Activado</strong> - Búsqueda optimizada habilitada (Recomendado)
+                                        {% else %}
+                                        🐢 <strong>Modo Lento Activado</strong> - Búsqueda secuencial (útil para debugging)
+                                        {% endif %}
+                                    </p>
+                                </div>
+                            </div>
+                            <form method="POST" class="ml-6">
+                                <input type="hidden" name="accion" value="toggle_optimizacion">
+                                <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white {% if config_info.busqueda_barcode_optimizada %}bg-yellow-600 hover:bg-yellow-700{% else %}bg-green-600 hover:bg-green-700{% endif %} focus:outline-none focus:ring-2 focus:ring-offset-2 {% if config_info.busqueda_barcode_optimizada %}focus:ring-yellow-500{% else %}focus:ring-green-500{% endif %}">
+                                    <svg class="h-5 w-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                                    </svg>
+                                    {% if config_info.busqueda_barcode_optimizada %}
+                                    Cambiar a Modo Lento
+                                    {% else %}
+                                    Cambiar a Modo Rápido
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <h2 class="text-2xl font-bold text-gray-900 mb-6 mt-8">Reiniciar Aplicación</h2>
+                    
+                    <div class="bg-gray-50 rounded-lg p-6">
+                        <div class="flex items-start justify-between">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-medium text-gray-900">Reiniciar el Sistema</h3>
+                                <p class="mt-2 text-sm text-gray-600">
+                                    Reiniciar la aplicación restaura todas las configuraciones temporales a sus valores predeterminados.
+                                </p>
+                                
+                                {% if config_info.es_railway %}
+                                <div class="mt-4 p-4 bg-blue-50 border-l-4 border-blue-400 rounded">
+                                    <div class="flex">
+                                        <div class="flex-shrink-0">
+                                            <svg class="h-5 w-5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                            </svg>
+                                        </div>
+                                        <div class="ml-3">
+                                            <p class="text-sm text-blue-700">
+                                                <strong>Aplicación desplegada en Railway</strong><br>
+                                                Para reiniciar, ve al dashboard de Railway → tu proyecto → pestaña "Settings" → sección "Danger" → botón "Restart Deployment"
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+                                {% else %}
+                                <div class="mt-4 p-3 bg-yellow-50 rounded-md">
+                                    <p class="text-sm text-yellow-700">
+                                        ⚠️ <strong>Advertencia:</strong> Esto cerrará todas las sesiones activas y la aplicación se reiniciará automáticamente.
+                                    </p>
+                                </div>
+                                {% endif %}
+                            </div>
+                            
+                            <form method="POST" action="/configuracion" class="ml-4" onsubmit="return confirm('¿Estás seguro de que deseas reiniciar la aplicación?');">
+                                <input type="hidden" name="accion" value="reiniciar_app">
+                                <button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500">
+                                    <svg class="mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                    </svg>
+                                    {% if config_info.es_railway %}
+                                    Ver Instrucciones
+                                    {% else %}
+                                    Reiniciar Ahora
+                                    {% endif %}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="mt-8 pt-6 border-t border-gray-200">
+                        <p class="text-sm text-gray-500 text-center">
+                            Los cambios en la configuración son temporales y se aplicarán hasta que se reinicie la aplicación.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+</body>
+</html>
