@@ -1,5 +1,6 @@
 # --- IMPORTACIONES ---
 from flask import Flask, render_template, request, send_from_directory, abort, redirect, url_for, session, jsonify
+from flask_cors import CORS
 import traceback
 import os
 import json
@@ -58,6 +59,7 @@ except Exception:
     pass
 
 app = Flask(__name__)
+CORS(app, resources={r"/*": {"origins": "*"}})
 app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-change-me')
 app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # 25MB por archivo
 app.config['UPLOAD_EXTENSIONS'] = ['.xlsx', '.xls']
@@ -1736,7 +1738,7 @@ def buscar_productos_por_codigo_patron(patron: str, proveedor_filtrado: str = ''
                 if prov_key_filter:
                     cur.execute(
                         """
-                        SELECT proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, NULL::text AS iva_text
+                        SELECT proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos
                         FROM productos_listas
                         WHERE codigo_digitos LIKE %s AND proveedor_key = %s
                         ORDER BY proveedor_key, codigo
@@ -1747,7 +1749,7 @@ def buscar_productos_por_codigo_patron(patron: str, proveedor_filtrado: str = ''
                 else:
                     cur.execute(
                         """
-                        SELECT proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, NULL::text AS iva_text
+                        SELECT proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos
                         FROM productos_listas
                         WHERE codigo_digitos LIKE %s
                         ORDER BY proveedor_key, codigo
@@ -1764,7 +1766,9 @@ def buscar_productos_por_codigo_patron(patron: str, proveedor_filtrado: str = ''
                         codigo_raw = r.get('codigo') or ''
                         nombre_raw = r.get('nombre') or ''
                         precio_db = r.get('precio')
-                        iva_text = r.get('iva_text') or 'N/A'
+                        iva_text = r.get('iva') or 'N/A'
+                        precios_json = r.get('precios') or {}
+                        extra_json = r.get('extra_datos') or {}
                     else:
                         prov_key = r[0]
                         prov_name = (r[1] or get_proveedor_display_name(prov_key))
@@ -1773,6 +1777,44 @@ def buscar_productos_por_codigo_patron(patron: str, proveedor_filtrado: str = ''
                         nombre_raw = r[5] or ''
                         precio_db = r[6]
                         iva_text = r[7] or 'N/A'
+                        precios_json = r[8] or {}
+                        extra_json = r[9] or {}
+
+                    if isinstance(precios_json, str):
+                        try:
+                            precios_json = json.loads(precios_json)
+                        except Exception:
+                            precios_json = {}
+                    if isinstance(extra_json, str):
+                        try:
+                            extra_json = json.loads(extra_json)
+                        except Exception:
+                            extra_json = {}
+
+                    precios_a_mostrar = {}
+                    if precio_db is not None and precio_db > 0:
+                        precio_float = float(precio_db) if hasattr(precio_db, '__float__') else precio_db
+                        if prov_key == 'brementools':
+                            precios_a_mostrar['Precio de Venta'] = precio_float
+                        elif prov_key == 'crossmaster':
+                            precios_a_mostrar['Precio Lista'] = precio_float
+                        elif prov_key == 'berger':
+                            precios_a_mostrar['Precio'] = precio_float
+                        elif prov_key == 'chiesa':
+                            precios_a_mostrar['Pr.Unit'] = precio_float
+                        elif prov_key == 'cachan':
+                            precios_a_mostrar['Precio'] = precio_float
+                        else:
+                            precios_a_mostrar['Precio'] = precio_float
+
+                    if precios_json:
+                        for k, v in precios_json.items():
+                            if v is not None and v != '':
+                                try:
+                                    precios_a_mostrar[k] = float(v) if hasattr(v, '__float__') else v
+                                except Exception:
+                                    precios_a_mostrar[k] = v
+
                     producto = {
                         'codigo': str(codigo_raw),
                         'producto': formatear_pulgadas(nombre_raw),
@@ -1780,9 +1822,10 @@ def buscar_productos_por_codigo_patron(patron: str, proveedor_filtrado: str = ''
                         'proveedor_key': prov_key,
                         'sheet_name': hoja,
                         'iva': iva_text,
-                        'precios': {'Precio': precio_db},
-                        'extra_datos': {},
-                        'precios_calculados': {}
+                        'precios': precios_a_mostrar,
+                        'extra_datos': extra_json,
+                        'precios_calculados': {},
+                        'fuente': 'DB'
                     }
                     producto['codigo_coincidencia'] = ''.join(filter(str.isdigit, str(codigo_raw)))
                     resultados.append(producto)
@@ -4778,6 +4821,154 @@ def barcode_search():
         proveedor_filtro=proveedor_filtro_manual,  # Usar el manual para el formulario
         modo_barcode_inteligente=MODO_BARCODE_INTELIGENTE
     )
+
+
+@app.route('/api/search', methods=['GET'])
+def api_search():
+    expected_api_key = (os.getenv('API_KEY') or '').strip()
+    provided_api_key = (request.args.get('key') or '').strip()
+
+    if not expected_api_key or provided_api_key != expected_api_key:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    q = (request.args.get('q') or '').strip()
+    if not q:
+        return jsonify([])
+
+    proveedor = (request.args.get('proveedor') or '').strip()
+
+    # Si la consulta tiene letras, hacer búsqueda por texto (nombre/código).
+    # Si es solo numérica, mantener búsqueda por patrón de código.
+    tiene_letras = any(ch.isalpha() for ch in q)
+    resultados_raw = []
+
+    if tiene_letras:
+        if LISTAS_EN_DB and DATABASE_URL and psycopg:
+            proveedor_key = provider_name_to_key(proveedor) if proveedor else None
+            resultados_db, _ = buscar_productos_avanzados_db(
+                q,
+                page=1,
+                per_page=500,
+                proveedor_filter=proveedor_key
+            )
+            resultados_raw = resultados_db or []
+        else:
+            # Fallback local sin DB: reutilizar listas cargadas desde Excel
+            productos_excel = []
+            try:
+                excel_files = sorted(os.listdir(LISTAS_PATH))
+            except Exception:
+                excel_files = []
+
+            proveedor_key_filter = provider_name_to_key(proveedor) if proveedor else ''
+            termino_norm = normalize_text(formatear_pulgadas(q))
+            palabras = [token for token in termino_norm.split() if token]
+
+            for filename in excel_files:
+                if not filename.lower().endswith(('.xlsx', '.xls')):
+                    continue
+                if 'old' in filename.lower():
+                    continue
+
+                provider_key = provider_key_from_filename(filename)
+                if proveedor_key_filter and provider_key != proveedor_key_filter:
+                    continue
+
+                config = EXCEL_PROVIDER_CONFIG.get(provider_key)
+                if not config:
+                    continue
+
+                header_row_index = config.get('fila_encabezado')
+                if header_row_index is None:
+                    continue
+
+                file_path = os.path.join(LISTAS_PATH, filename)
+                try:
+                    all_sheets = pd.read_excel(file_path, sheet_name=None, header=header_row_index)
+                except Exception:
+                    continue
+
+                proveedor_display_name = get_proveedor_display_name(provider_key)
+
+                for sheet_name, df in all_sheets.items():
+                    if df.empty:
+                        continue
+
+                    df.columns = [normalize_text(c) for c in df.columns]
+                    actual_cols = {
+                        'codigo': next((alias for alias in config['codigo'] if alias in df.columns), None),
+                        'producto': next((alias for alias in config['producto'] if alias in df.columns), None),
+                        'iva': next((alias for alias in config.get('iva', []) if alias in df.columns), None),
+                        'precios_a_mostrar': [alias for alias in config.get('precios_a_mostrar', []) if alias in df.columns],
+                        'extra_datos': [alias for alias in config.get('extra_datos', []) if alias in df.columns]
+                    }
+
+                    if not actual_cols['codigo'] or not actual_cols['producto']:
+                        continue
+
+                    producto_busqueda = df[actual_cols['producto']].apply(lambda x: normalize_text(formatear_pulgadas(x)))
+                    if palabras:
+                        condition = producto_busqueda.apply(lambda nombre: all(palabra in nombre for palabra in palabras))
+                    else:
+                        condition = producto_busqueda.str.contains(termino_norm)
+
+                    for idx in df.index[condition]:
+                        fila = df.loc[idx]
+                        codigo_val = str(fila.get(actual_cols['codigo'])).split('.')[0] if pd.notna(fila.get(actual_cols['codigo'])) else ''
+                        producto = build_producto_entry(
+                            fila,
+                            actual_cols,
+                            provider_key,
+                            proveedor_display_name,
+                            sheet_name,
+                            df.columns,
+                            codigo_override=codigo_val
+                        )
+                        productos_excel.append(producto)
+
+            resultados_raw = productos_excel
+    else:
+        resultados_raw = buscar_productos_por_codigo_patron(q, proveedor)
+
+    resultados_api = []
+
+    for item in resultados_raw:
+        codigo = item.get('codigo')
+        nombre = item.get('producto') or item.get('nombre') or ''
+
+        categoria = None
+        extra = item.get('extra_datos') or {}
+        if isinstance(extra, dict):
+            categoria = (
+                extra.get('Categoria')
+                or extra.get('categoria')
+                or extra.get('CATEGORIA')
+            )
+
+        precio = None
+        precios = item.get('precios') or {}
+        if isinstance(precios, dict) and precios:
+            primer_valor = next(iter(precios.values()))
+            try:
+                if primer_valor is not None and primer_valor != '':
+                    precio = float(primer_valor)
+            except Exception:
+                precio = primer_valor
+
+        resultados_api.append({
+            'codigo': str(codigo) if codigo is not None else '',
+            'nombre': nombre,
+            'proveedor': item.get('proveedor') or '',
+            'proveedor_key': item.get('proveedor_key') or '',
+            'hoja': item.get('sheet_name') or '',
+            'iva': item.get('iva') or 'N/A',
+            'categoria': categoria,
+            'precio': precio,
+            'precios': precios if isinstance(precios, dict) else {},
+            'extra_datos': extra if isinstance(extra, dict) else {},
+        })
+
+    return jsonify(resultados_api)
 
 @app.route('/health')
 def health():

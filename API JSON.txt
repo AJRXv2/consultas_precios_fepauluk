@@ -1,0 +1,100 @@
+[
+  {
+    "categoria": "INSTRUMENTOS DE MEDICIÓN",
+    "codigo": "383",
+    "extra_datos": {
+      "Cantidad": 1,
+      "Categoria": "INSTRUMENTOS DE MEDICIÓN"
+    },
+    "hoja": "",
+    "iva": "10.5%",
+    "nombre": "MULTIMETRO AGUJA (TESTER) (0-500V)",
+    "precio": 12250.958,
+    "precios": {
+      "Precio Neto": 6749.83912848469,
+      "Precio de Lista": 10822.25289159,
+      "Precio de Venta": 12250.958
+    },
+    "proveedor": "BremenTools",
+    "proveedor_key": "brementools"
+  },
+{
+    "categoria": null,
+    "codigo": "9936583",
+    "extra_datos": {
+
+    },
+    "hoja": "",
+    "iva": "10.5%",
+    "nombre": "MULTIMETRO DIGITAL 200-1000V CROSS",
+    "precio": 8331,
+    "precios": {
+      "Precio Lista": 8331
+    },
+    "proveedor": "Crossmaster",
+    "proveedor_key": "crossmaster"
+  },
+ {
+    "categoria": null,
+    "codigo": "1801",
+    "extra_datos": {
+
+    },
+    "hoja": "",
+    "iva": "N/A",
+    "nombre": "ADAPTADOR TALADRO ROSCA  1/2 \"   25",
+    "precio": 207.91,
+    "precios": {
+      "Precio": 207.91
+    },
+    "proveedor": "Berger",
+    "proveedor_key": "berger"
+  },
+{
+    "categoria": null,
+    "codigo": "342",
+    "extra_datos": {
+
+    },
+    "hoja": "",
+    "iva": "21%",
+    "nombre": "B+D Taladro BED-710450 10mm-Perc-Vvr-450W",
+    "precio": 67996,
+    "precios": {
+      "Pr.Unit": 67996
+    },
+    "proveedor": "Chiesa",
+    "proveedor_key": "chiesa"
+  },
+{
+    "categoria": null,
+    "codigo": "EZTP810",
+    "extra_datos": {
+
+    },
+    "hoja": "",
+    "iva": "N/A",
+    "nombre": "TALADRO PERCUTOR EZETA 810W",
+    "precio": 126928.69,
+    "precios": {
+      "Precio": 126928.69
+    },
+    "proveedor": "Cachan",
+    "proveedor_key": "cachan"
+  },
+{
+    "categoria": null,
+    "codigo": "0062",
+    "extra_datos": {
+
+    },
+    "hoja": "",
+    "iva": "N/A",
+    "nombre": "SILOC ACERO LIQUIDO 57G",
+    "precio": 0,
+    "precios": {
+      "Precio": 0
+    },
+    "proveedor": "Manual",
+    "proveedor_key": "manual"
+  }
