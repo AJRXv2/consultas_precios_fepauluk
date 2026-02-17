@@ -442,6 +442,112 @@
                                         </form>
                                     </div>
                                     <div>
+                                        <h2 class="text-xl font-semibold text-gray-900 mb-2">🧭 Importación Guiada (mapear columnas)</h2>
+                                        <p class="text-xs text-gray-500 mb-3">Sube un Excel, elige proveedor y luego selecciona qué columnas corresponden a código, nombre, precio, IVA y extras.</p>
+                                        <form method="post" enctype="multipart/form-data" class="p-4 border rounded-md bg-gray-50 space-y-4">
+                                            <input type="hidden" name="formulario" value="preparar_importacion_excel">
+                                            <input type="hidden" class="active_tab_input" name="active_tab" value="gestion">
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">Proveedor destino</label>
+                                                <select name="proveedor_wizard" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                                    <option value="">-- Seleccionar proveedor --</option>
+                                                    {% for nombre_prov in lista_nombres_proveedores %}
+                                                        <option value="{{ nombre_prov }}">{{ nombre_prov }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">Archivo Excel</label>
+                                                <input type="file" name="archivo_excel_wizard" accept=".xlsx,.xls" required class="mt-1 block w-full text-sm text-gray-700" />
+                                            </div>
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700">Fila de encabezados (0 = primera fila)</label>
+                                                    <input type="number" min="0" step="1" name="header_row_wizard" value="0" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                                </div>
+                                                <div class="flex items-end">
+                                                    <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700">Leer columnas</button>
+                                                </div>
+                                            </div>
+                                        </form>
+
+                                        {% if excel_import_wizard %}
+                                        <form method="post" class="mt-4 p-4 border rounded-md bg-emerald-50 space-y-4">
+                                            <input type="hidden" name="formulario" value="confirmar_importacion_excel">
+                                            <input type="hidden" class="active_tab_input" name="active_tab" value="gestion">
+                                            <input type="hidden" name="wizard_temp_filename" value="{{ excel_import_wizard.temp_filename }}">
+                                            <input type="hidden" name="wizard_original_filename" value="{{ excel_import_wizard.original_filename }}">
+                                            <input type="hidden" name="wizard_provider_name" value="{{ excel_import_wizard.provider_name }}">
+                                            <input type="hidden" name="wizard_header_row" value="{{ excel_import_wizard.header_row }}">
+
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700">Hoja</label>
+                                                    <select name="wizard_sheet_name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                                        {% for hoja in excel_import_wizard.sheet_names %}
+                                                            <option value="{{ hoja }}" {% if hoja == excel_import_wizard.sheet_selected %}selected{% endif %}>{{ hoja }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div class="text-xs text-gray-600 flex items-end">
+                                                    Archivo: {{ excel_import_wizard.original_filename }} · Filas detectadas: {{ excel_import_wizard.row_count }}
+                                                </div>
+                                            </div>
+
+                                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700">Columna Código *</label>
+                                                    <select name="col_codigo" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                                        <option value="">-- Seleccionar --</option>
+                                                        {% for col in excel_import_wizard.columns %}
+                                                            <option value="{{ col }}" {% if excel_import_wizard.defaults.codigo == col %}selected{% endif %}>{{ col }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700">Columna Nombre *</label>
+                                                    <select name="col_nombre" required class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                                        <option value="">-- Seleccionar --</option>
+                                                        {% for col in excel_import_wizard.columns %}
+                                                            <option value="{{ col }}" {% if excel_import_wizard.defaults.nombre == col %}selected{% endif %}>{{ col }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700">Columna Precio (opcional)</label>
+                                                    <select name="col_precio" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                                        <option value="">-- Sin precio --</option>
+                                                        {% for col in excel_import_wizard.columns %}
+                                                            <option value="{{ col }}" {% if excel_import_wizard.defaults.precio == col %}selected{% endif %}>{{ col }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="block text-sm font-medium text-gray-700">Columna IVA (opcional)</label>
+                                                    <select name="col_iva" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                                        <option value="">-- Sin IVA --</option>
+                                                        {% for col in excel_import_wizard.columns %}
+                                                            <option value="{{ col }}" {% if excel_import_wizard.defaults.iva == col %}selected{% endif %}>{{ col }}</option>
+                                                        {% endfor %}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label class="block text-sm font-medium text-gray-700">Columnas extra (opcionales)</label>
+                                                <select name="cols_extra" multiple size="6" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm text-sm">
+                                                    {% for col in excel_import_wizard.columns %}
+                                                        <option value="{{ col }}">{{ col }}</option>
+                                                    {% endfor %}
+                                                </select>
+                                                <p class="mt-1 text-xs text-gray-500">Tip: mantén Ctrl presionado para seleccionar múltiples columnas.</p>
+                                            </div>
+
+                                            <button type="submit" class="inline-flex justify-center rounded-md border border-transparent bg-emerald-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-emerald-700">Importar a proveedor</button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
+                                    <div>
                                         <h2 class="text-xl font-semibold text-gray-900 mb-2">�️ Sincronizar Listas a Base (PostgreSQL)</h2>
                                         <div class="p-4 border rounded-md bg-gray-50 space-y-3">
                                             <p class="text-sm text-gray-600">Importa/actualiza los productos de los archivos Excel hacia la base de datos. Requiere tener LISTAS_EN_DB=1 y PostgreSQL disponible.</p>

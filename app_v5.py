@@ -1973,6 +1973,218 @@ def _find_first_col(df_cols, aliases):
                 return c
     return None
 
+
+def _guess_excel_column(columns, aliases):
+    aliases_norm = [normalize_text(a) for a in (aliases or [])]
+    for col in columns:
+        col_norm = normalize_text(col)
+        if col_norm in aliases_norm:
+            return col
+    return None
+
+
+def _sanitize_excel_temp_name(filename: str) -> str:
+    base_name = os.path.basename(filename or 'import.xlsx')
+    base_name = re.sub(r'[^a-zA-Z0-9._-]+', '_', base_name)
+    if not base_name.lower().endswith(('.xlsx', '.xls')):
+        base_name = f"{base_name}.xlsx"
+    return f"_wizard_{uuid.uuid4().hex[:10]}_{base_name}"
+
+
+def _format_iva_text(raw_iva):
+    if raw_iva is None or pd.isna(raw_iva):
+        return None
+    if isinstance(raw_iva, (int, float)):
+        iva_value = raw_iva * 100 if raw_iva < 1 else raw_iva
+        return f"{int(iva_value)}%" if iva_value == int(iva_value) else f"{iva_value}%"
+    try:
+        iva_num = float(str(raw_iva).strip().replace('%', '').replace(',', '.'))
+        iva_value = iva_num * 100 if iva_num < 1 else iva_num
+        return f"{int(iva_value)}%" if iva_value == int(iva_value) else f"{iva_value}%"
+    except Exception:
+        return str(raw_iva).strip()
+
+
+def preparar_excel_import_wizard(archivo_excel, provider_name: str, sheet_name: str = '', header_row: int = 0):
+    if not archivo_excel or not archivo_excel.filename:
+        return None, '⚠️ Debes seleccionar un archivo Excel.'
+
+    ext = os.path.splitext(archivo_excel.filename)[1].lower()
+    if ext not in ('.xlsx', '.xls'):
+        return None, '⚠️ El archivo debe ser .xlsx o .xls.'
+
+    temp_filename = _sanitize_excel_temp_name(archivo_excel.filename)
+    temp_path = os.path.join(LISTAS_PATH, temp_filename)
+
+    try:
+        archivo_excel.save(temp_path)
+        excel_file = pd.ExcelFile(temp_path)
+        sheet_names = excel_file.sheet_names or []
+        if not sheet_names:
+            return None, '⚠️ El Excel no contiene hojas.'
+
+        sheet_selected = sheet_name if sheet_name in sheet_names else sheet_names[0]
+        header_row = max(0, int(header_row))
+
+        df = pd.read_excel(temp_path, sheet_name=sheet_selected, header=header_row)
+        columns = [str(c).strip() for c in list(df.columns)]
+        if not columns:
+            return None, '⚠️ No se detectaron columnas en la hoja seleccionada.'
+
+        defaults = {
+            'codigo': _guess_excel_column(columns, ['codigo', 'código', 'cod', 'codigo ean', 'ean']),
+            'nombre': _guess_excel_column(columns, ['nombre', 'producto', 'descripcion', 'descripción', 'detalle']),
+            'precio': _guess_excel_column(columns, ['precio', 'precio lista', 'precio de lista', 'precio de venta', 'pr unit', 'prunit', 'pventa']),
+            'iva': _guess_excel_column(columns, ['iva', 'i.v.a'])
+        }
+
+        provider_name = (provider_name or '').strip()
+        provider_key = provider_name_to_key(provider_name) if provider_name else ''
+
+        wizard = {
+            'temp_filename': temp_filename,
+            'original_filename': archivo_excel.filename,
+            'sheet_names': sheet_names,
+            'sheet_selected': sheet_selected,
+            'header_row': header_row,
+            'columns': columns,
+            'defaults': defaults,
+            'provider_name': provider_name,
+            'provider_key': provider_key,
+            'row_count': len(df)
+        }
+        return wizard, None
+    except Exception as exc:
+        try:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+        except Exception:
+            pass
+        return None, f'❌ Error preparando importación guiada: {exc}'
+
+
+def importar_excel_con_mapeo_db(
+    temp_filename: str,
+    original_filename: str,
+    provider_name: str,
+    sheet_name: str,
+    header_row: int,
+    col_codigo: str,
+    col_nombre: str,
+    col_precio: str,
+    col_iva: str,
+    cols_extra: list[str]
+):
+    if not (DATABASE_URL and psycopg):
+        return 0, '⚠️ Esta importación guiada requiere PostgreSQL habilitado.'
+
+    if not temp_filename or not temp_filename.startswith('_wizard_'):
+        return 0, '⚠️ Token de importación inválido.'
+
+    temp_path = os.path.join(LISTAS_PATH, temp_filename)
+    if not os.path.exists(temp_path):
+        return 0, '⚠️ El archivo temporal no existe. Vuelve a cargar el Excel.'
+
+    provider_name = (provider_name or '').strip()
+    provider_key = provider_name_to_key(provider_name)
+    if not provider_name or not provider_key:
+        return 0, '⚠️ Debes elegir un proveedor válido.'
+
+    try:
+        header_row = max(0, int(header_row))
+        df = pd.read_excel(temp_path, sheet_name=sheet_name, header=header_row)
+        if col_codigo not in df.columns or col_nombre not in df.columns:
+            return 0, '⚠️ Las columnas mapeadas ya no existen en el archivo.'
+
+        mtime = os.path.getmtime(temp_path)
+        archivo_db = f"WIZARD-{provider_key}-{os.path.basename(original_filename or temp_filename)}"
+
+        batch_rows = []
+        for _, fila in df.iterrows():
+            raw_code = fila.get(col_codigo)
+            raw_name = fila.get(col_nombre)
+            if pd.isna(raw_code) or pd.isna(raw_name):
+                continue
+
+            code = str(raw_code).strip()
+            if code.endswith('.0'):
+                code = code[:-2] or code
+            name = str(raw_name).strip()
+            if not code or not name:
+                continue
+
+            precio_val = None
+            if col_precio and col_precio in df.columns and pd.notna(fila.get(col_precio)):
+                precio_val = parse_price_value(fila.get(col_precio))
+
+            iva_text = None
+            if col_iva and col_iva in df.columns:
+                iva_text = _format_iva_text(fila.get(col_iva))
+
+            precios_dict = {}
+            if col_precio and precio_val is not None:
+                precios_dict[str(col_precio)] = float(precio_val)
+
+            extra = {}
+            for col in (cols_extra or []):
+                if col in df.columns:
+                    value = fila.get(col)
+                    if pd.notna(value):
+                        extra[str(col)] = value.item() if hasattr(value, 'item') else value
+
+            codigo_digitos = ''.join(filter(str.isdigit, code))
+            nombre_norm = normalize_text(formatear_pulgadas(name))
+            codigo_norm = normalize_text(code)
+
+            batch_rows.append((
+                provider_key, provider_name, archivo_db, sheet_name, mtime,
+                code, codigo_digitos, codigo_norm,
+                name, nombre_norm,
+                float(precio_val) if precio_val is not None else None,
+                str(col_precio) if col_precio else 'precio',
+                iva_text,
+                json.dumps(precios_dict, ensure_ascii=False),
+                json.dumps(extra, ensure_ascii=False)
+            ))
+
+        if not batch_rows:
+            return 0, '⚠️ No se encontraron filas válidas para importar.'
+
+        with get_pg_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO import_batches (proveedor_key, archivo, mtime, status) VALUES (%s,%s,%s,%s) RETURNING id",
+                (provider_key, archivo_db, mtime, 'running')
+            )
+            batch_row = cur.fetchone()
+            batch_id = (batch_row['id'] if isinstance(batch_row, dict) else batch_row[0]) if batch_row is not None else None
+
+            cur.execute("DELETE FROM productos_listas WHERE archivo=%s", (archivo_db,))
+            cur.executemany(
+                """
+                INSERT INTO productos_listas
+                (proveedor_key, proveedor_nombre, archivo, hoja, mtime,
+                 codigo, codigo_digitos, codigo_normalizado,
+                 nombre, nombre_normalizado,
+                 precio, precio_fuente, iva, precios, extra_datos, batch_id)
+                VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s)
+                """,
+                [row + (batch_id,) for row in batch_rows]
+            )
+            cur.execute(
+                "UPDATE import_batches SET status=%s, completed_at=NOW(), total_rows=%s WHERE id=%s",
+                ('completed', len(batch_rows), batch_id)
+            )
+            conn.commit()
+
+        try:
+            os.remove(temp_path)
+        except Exception:
+            pass
+
+        return len(batch_rows), None
+    except Exception as exc:
+        return 0, f'❌ Error importando Excel con mapeo: {exc}'
+
 def sync_listas_to_db():
     """Lee archivos Excel de LISTAS_PATH y carga productos a PostgreSQL.
     Reemplaza por archivo (DELETE + INSERT en transacción) y registra lote en import_batches.
@@ -3008,6 +3220,7 @@ def index():
     ventas_busqueda_resultados = []
     ventas_producto_seleccionado = None
     ventas_producto_complemento = None
+    excel_import_wizard = None
     per_page = VENTAS_AVANZADAS_PER_PAGE
     ventas_formularios = {
         "ventas_avanzadas_buscar",
@@ -4392,6 +4605,73 @@ def index():
                         resultados_subida.append(f"❌ {nombre_orig}: error {e}")
                 mensaje = " | ".join(resultados_subida)
 
+        elif formulario == "preparar_importacion_excel":
+            active_tab = "gestion"
+            proveedor_wizard = request.form.get('proveedor_wizard', '').strip()
+            sheet_wizard = request.form.get('sheet_name_wizard', '').strip()
+            header_row_raw = request.form.get('header_row_wizard', '0')
+            try:
+                header_row_wizard = int(header_row_raw)
+            except Exception:
+                header_row_wizard = 0
+
+            archivo_wizard = request.files.get('archivo_excel_wizard')
+            if not (DATABASE_URL and psycopg):
+                mensaje = "⚠️ La importación guiada requiere PostgreSQL activo (DATABASE_URL + LISTAS_EN_DB=1)."
+            else:
+                wizard_data, wizard_error = preparar_excel_import_wizard(
+                    archivo_wizard,
+                    provider_name=proveedor_wizard,
+                    sheet_name=sheet_wizard,
+                    header_row=header_row_wizard
+                )
+                if wizard_error:
+                    mensaje = wizard_error
+                else:
+                    excel_import_wizard = wizard_data
+                    mensaje = (
+                        f"✅ Archivo leído. Selecciona columnas para importar "
+                        f"({wizard_data.get('row_count', 0)} filas detectadas)."
+                    )
+
+        elif formulario == "confirmar_importacion_excel":
+            active_tab = "gestion"
+            temp_filename = request.form.get('wizard_temp_filename', '').strip()
+            original_filename = request.form.get('wizard_original_filename', '').strip()
+            provider_name = request.form.get('wizard_provider_name', '').strip()
+            sheet_name = request.form.get('wizard_sheet_name', '').strip()
+
+            try:
+                header_row = int(request.form.get('wizard_header_row', '0'))
+            except Exception:
+                header_row = 0
+
+            col_codigo = request.form.get('col_codigo', '').strip()
+            col_nombre = request.form.get('col_nombre', '').strip()
+            col_precio = request.form.get('col_precio', '').strip()
+            col_iva = request.form.get('col_iva', '').strip()
+            cols_extra = request.form.getlist('cols_extra')
+
+            if not col_codigo or not col_nombre:
+                mensaje = "⚠️ Debes mapear al menos las columnas de Código y Nombre."
+            else:
+                filas_insertadas, import_error = importar_excel_con_mapeo_db(
+                    temp_filename=temp_filename,
+                    original_filename=original_filename,
+                    provider_name=provider_name,
+                    sheet_name=sheet_name,
+                    header_row=header_row,
+                    col_codigo=col_codigo,
+                    col_nombre=col_nombre,
+                    col_precio=col_precio,
+                    col_iva=col_iva,
+                    cols_extra=cols_extra
+                )
+                if import_error:
+                    mensaje = import_error
+                else:
+                    mensaje = f"✅ Importación guiada completada. Filas importadas: {filas_insertadas}."
+
     historial = load_historial()
     historial.reverse() 
     lista_proveedores_display = sorted([(p_id, generar_nombre_visible(p_data)) for p_id, p_data in proveedores.items()], key=lambda x: x[1])
@@ -4517,7 +4797,8 @@ def index():
         "ultimas_actualizaciones": ultimas_actualizaciones_list,
         "listas_path": LISTAS_PATH,
         "listas_vigentes": listas_vigentes,
-        "listas_old": listas_old
+        "listas_old": listas_old,
+        "excel_import_wizard": excel_import_wizard
     }
 
     if (
