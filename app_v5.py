@@ -1151,7 +1151,7 @@ def buscar_productos_por_codigos_multiples(codigos_lista: list, proveedor_filtra
                     if prov_key_filter:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
+                            SELECT
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE (
@@ -1165,7 +1165,7 @@ def buscar_productos_por_codigos_multiples(codigos_lista: list, proveedor_filtra
                     else:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
+                            SELECT
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE (
@@ -1260,7 +1260,7 @@ def buscar_productos_por_codigos_multiples(codigos_lista: list, proveedor_filtra
                     if prov_key_filter:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
+                            SELECT
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE codigo = ANY(%s) AND proveedor_key = %s
@@ -1271,7 +1271,7 @@ def buscar_productos_por_codigos_multiples(codigos_lista: list, proveedor_filtra
                     else:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
+                            SELECT
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE codigo = ANY(%s)
@@ -1392,7 +1392,7 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                     if prov_key_filter:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
+                            SELECT
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE (
@@ -1407,7 +1407,7 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                     else:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
+                            SELECT
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE (
@@ -1423,7 +1423,7 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                     if prov_key_filter:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
+                            SELECT
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE codigo = %s AND proveedor_key = %s
@@ -1434,7 +1434,7 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                     else:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
+                            SELECT
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE codigo = %s
