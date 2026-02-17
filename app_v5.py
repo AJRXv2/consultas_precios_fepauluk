@@ -1151,28 +1151,28 @@ def buscar_productos_por_codigos_multiples(codigos_lista: list, proveedor_filtra
                     if prov_key_filter:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo)
+                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE (
                                 codigo = ANY(%s)
                                 OR codigo_digitos = ANY(%s)
                             ) AND proveedor_key = %s
-                            ORDER BY proveedor_key, codigo, mtime DESC
+                            ORDER BY proveedor_key, codigo, archivo, hoja, nombre, mtime DESC
                             """,
                             (codigos_numericos, codigos_numericos, prov_key_filter)
                         )
                     else:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo)
+                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE (
                                 codigo = ANY(%s)
                                 OR codigo_digitos = ANY(%s)
                             )
-                            ORDER BY proveedor_key, codigo, mtime DESC
+                            ORDER BY proveedor_key, codigo, archivo, hoja, nombre, mtime DESC
                             """,
                             (codigos_numericos, codigos_numericos)
                         )
@@ -1260,22 +1260,22 @@ def buscar_productos_por_codigos_multiples(codigos_lista: list, proveedor_filtra
                     if prov_key_filter:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo)
+                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE codigo = ANY(%s) AND proveedor_key = %s
-                            ORDER BY proveedor_key, codigo, mtime DESC
+                            ORDER BY proveedor_key, codigo, archivo, hoja, nombre, mtime DESC
                             """,
                             (codigos_no_numericos, prov_key_filter)
                         )
                     else:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo)
+                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE codigo = ANY(%s)
-                            ORDER BY proveedor_key, codigo, mtime DESC
+                            ORDER BY proveedor_key, codigo, archivo, hoja, nombre, mtime DESC
                             """,
                             (codigos_no_numericos,)
                         )
@@ -1392,7 +1392,7 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                     if prov_key_filter:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo)
+                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE (
@@ -1400,14 +1400,14 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                                 OR codigo_digitos = %s
                                 OR regexp_replace(codigo_digitos, '^0+', '') = regexp_replace(%s, '^0+', '')
                             ) AND proveedor_key = %s
-                            ORDER BY proveedor_key, codigo, mtime DESC
+                            ORDER BY proveedor_key, codigo, archivo, hoja, nombre, mtime DESC
                             """,
                             (codigo_limpio, codigo_limpio, codigo_limpio, prov_key_filter)
                         )
                     else:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo)
+                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE (
@@ -1415,7 +1415,7 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                                 OR codigo_digitos = %s
                                 OR regexp_replace(codigo_digitos, '^0+', '') = regexp_replace(%s, '^0+', '')
                             )
-                            ORDER BY proveedor_key, codigo, mtime DESC
+                            ORDER BY proveedor_key, codigo, archivo, hoja, nombre, mtime DESC
                             """,
                             (codigo_limpio, codigo_limpio, codigo_limpio)
                         )
@@ -1423,22 +1423,22 @@ def buscar_productos_por_codigo_exacto(codigo_exacto: str, proveedor_filtrado: s
                     if prov_key_filter:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo)
+                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE codigo = %s AND proveedor_key = %s
-                            ORDER BY proveedor_key, codigo, mtime DESC
+                            ORDER BY proveedor_key, codigo, archivo, hoja, nombre, mtime DESC
                             """,
                             (codigo_limpio, prov_key_filter)
                         )
                     else:
                         cur.execute(
                             """
-                            SELECT DISTINCT ON (proveedor_key, codigo)
+                            SELECT DISTINCT ON (proveedor_key, codigo, archivo, hoja, nombre)
                                    proveedor_key, proveedor_nombre, archivo, hoja, codigo, nombre, precio, iva, precios, extra_datos, mtime
                             FROM productos_listas
                             WHERE codigo = %s
-                            ORDER BY proveedor_key, codigo, mtime DESC
+                            ORDER BY proveedor_key, codigo, archivo, hoja, nombre, mtime DESC
                             """,
                             (codigo_limpio,)
                         )
@@ -4837,12 +4837,21 @@ def api_search():
 
     proveedor = (request.args.get('proveedor') or '').strip()
 
-    # Si la consulta tiene letras, hacer búsqueda por texto (nombre/código).
-    # Si es solo numérica, mantener búsqueda por patrón de código.
+    # Detección de búsqueda por código (incluye códigos alfanuméricos).
+    # Si parece código, intentamos primero coincidencia exacta y luego patrón numérico como fallback.
+    # Si no, usamos búsqueda textual avanzada por nombre/código.
     tiene_letras = any(ch.isalpha() for ch in q)
+    solo_digitos_q = ''.join(ch for ch in q if ch.isdigit())
+    contiene_espacios = any(ch.isspace() for ch in q)
+    caracteres_codigo_validos = re.fullmatch(r"[A-Za-z0-9\-._/\\]+", q) is not None
+    es_consulta_codigo = bool(solo_digitos_q) and not contiene_espacios and caracteres_codigo_validos
     resultados_raw = []
 
-    if tiene_letras:
+    if es_consulta_codigo:
+        resultados_raw = buscar_productos_por_codigo_exacto(q, proveedor)
+        if not resultados_raw and solo_digitos_q:
+            resultados_raw = buscar_productos_por_codigo_patron(solo_digitos_q, proveedor)
+    elif tiene_letras:
         if LISTAS_EN_DB and DATABASE_URL and psycopg:
             proveedor_key = provider_name_to_key(proveedor) if proveedor else None
             resultados_db, _ = buscar_productos_avanzados_db(
