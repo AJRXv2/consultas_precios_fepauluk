@@ -3369,9 +3369,11 @@ def index():
                 productos_encontrados = []
                 proveedor_key_filter = provider_name_to_key(proveedor_buscado) if proveedor_buscado else ''
 
-                # Intentar buscar en la base de datos primero si está habilitada
+                # Intentar buscar en la base de datos primero si está disponible.
+                # Esto incluye los productos cargados por el importador guiado (WIZARD-*),
+                # incluso cuando LISTAS_EN_DB esté desactivado para el flujo tradicional Excel->DB.
                 total_db = 0
-                if LISTAS_EN_DB and DATABASE_URL and psycopg:
+                if DATABASE_URL and psycopg:
                     print(f'[DEBUG consulta_producto] Buscando en DB: termino="{termino_busqueda}", proveedor="{proveedor_key_filter}"', flush=True)
                     try:
                         # Traer TODOS los resultados (máximo 5000) para paginación del lado del cliente
