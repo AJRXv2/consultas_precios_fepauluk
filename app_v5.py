@@ -2005,6 +2005,16 @@ def _format_iva_text(raw_iva):
         return str(raw_iva).strip()
 
 
+def _is_virtual_wizard_file(archivo: str) -> bool:
+    low = (archivo or '').strip().lower()
+    return low.startswith('wizard-')
+
+
+def _is_temp_wizard_excel(filename: str) -> bool:
+    low = (filename or '').strip().lower()
+    return low.startswith('_wizard_') and low.endswith(('.xlsx', '.xls'))
+
+
 def preparar_excel_import_wizard(archivo_excel, provider_name: str, sheet_name: str = '', header_row: int = 0):
     if not archivo_excel or not archivo_excel.filename:
         return None, '⚠️ Debes seleccionar un archivo Excel.'
@@ -2199,7 +2209,12 @@ def sync_listas_to_db():
 
     prov_cfg = _listas_provider_configs()
     try:
-        excel_files = sorted(f for f in os.listdir(LISTAS_PATH) if f.lower().endswith(('.xlsx', '.xls')) and 'old' not in f.lower())
+        excel_files = sorted(
+            f for f in os.listdir(LISTAS_PATH)
+            if f.lower().endswith(('.xlsx', '.xls'))
+            and 'old' not in f.lower()
+            and not _is_temp_wizard_excel(f)
+        )
         print(f"[DEBUG sync_listas_to_db] Archivos Excel encontrados: {len(excel_files)} -> {excel_files}")
     except Exception as exc:
         print(f"[DEBUG sync_listas_to_db] ERROR al listar {LISTAS_PATH}: {exc}")
@@ -2211,6 +2226,8 @@ def sync_listas_to_db():
         excel_set = set(excel_files)
         archivos_obsoletos = []
         for archivo_db in estado_db.keys():
+            if _is_virtual_wizard_file(archivo_db):
+                continue
             low = archivo_db.lower() if isinstance(archivo_db, str) else ''
             if (archivo_db not in excel_set) or ('old' in low):
                 archivos_obsoletos.append(archivo_db)
@@ -2585,6 +2602,8 @@ def _excel_files_state():
                 continue
             if 'old' in low:
                 continue
+            if _is_temp_wizard_excel(fname):
+                continue
             fpath = os.path.join(LISTAS_PATH, fname)
             try:
                 estado[fname] = os.path.getmtime(fpath)
@@ -2646,6 +2665,8 @@ def listas_db_desactualizadas(tolerancia_segundos: float = 1.0) -> bool:
             return True
     # Archivos que existen en DB pero ya no en disco (o marcados OLD) también disparan sincronización
     for archivo_db in db.keys():
+        if _is_virtual_wizard_file(archivo_db):
+            continue
         low = archivo_db.lower() if isinstance(archivo_db, str) else ''
         if archivo_db not in fs or 'old' in low:
             log_debug('listas_db_desactualizadas: archivo huérfano/OLD en DB', archivo_db)
@@ -4568,6 +4589,8 @@ def index():
                                 for existing in archivos_existentes:
                                     if not existing.lower().endswith(('.xlsx', '.xls')):
                                         continue
+                                    if _is_temp_wizard_excel(existing):
+                                        continue
                                     if 'old' in existing.lower():
                                         prov_part_old = os.path.splitext(existing)[0].split('-')[0]
                                         if normalize_text(prov_part_old) == norm_prov_subida:
@@ -4578,6 +4601,8 @@ def index():
                                 # 2) Renombrar la vigente (si existe) a OLD
                                 for existing in archivos_existentes:
                                     if not existing.lower().endswith(('.xlsx', '.xls')):
+                                        continue
+                                    if _is_temp_wizard_excel(existing):
                                         continue
                                     if 'old' in existing.lower():
                                         continue  # ya hemos limpiado las old
@@ -4715,6 +4740,8 @@ def index():
         for fname in os.listdir(LISTAS_PATH):
             if not fname.lower().endswith(('.xlsx', '.xls')):
                 continue
+            if _is_temp_wizard_excel(fname):
+                continue
             ruta = os.path.join(LISTAS_PATH, fname)
             try:
                 mtime = os.path.getmtime(ruta)
@@ -4742,7 +4769,10 @@ def index():
     listas_old = []
     try:
         for fname in os.listdir(LISTAS_PATH):
-            if not fname.lower().endswith(('.xlsx','.xls')): continue
+            if not fname.lower().endswith(('.xlsx','.xls')):
+                continue
+            if _is_temp_wizard_excel(fname):
+                continue
             full_path = os.path.join(LISTAS_PATH, fname)
             info = {
                 'filename': fname,
