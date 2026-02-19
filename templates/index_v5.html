@@ -143,7 +143,11 @@
                                             </span>
                                         </p>
                                         {% endif %}
-                                        <p class="text-lg text-black"><strong>CÓDIGO:</strong> {{ producto.codigo }}</p>
+                                        {% set codigo_mostrar = producto.codigo %}
+                                        {% if codigo_mostrar and (codigo_mostrar|string).startswith('SIN-COD-') %}
+                                            {% set codigo_mostrar = 'Sin código' %}
+                                        {% endif %}
+                                        <p class="text-lg text-black"><strong>CÓDIGO:</strong> {{ codigo_mostrar }}</p>
                                         <p class="text-lg text-black"><strong>PRODUCTO:</strong> {{ producto.producto }}</p>
                                         {# Categoria (si viene en extra_datos) #}
                                         {% set categoria_val = None %}

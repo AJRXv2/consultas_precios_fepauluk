@@ -5,6 +5,14 @@
     </div>
 {% endif %}
 
+{% macro mostrar_codigo(codigo) -%}
+    {%- if codigo and (codigo|string).startswith('SIN-COD-') -%}
+        Sin código
+    {%- else -%}
+        {{ codigo }}
+    {%- endif -%}
+{%- endmacro %}
+
 {% if productos_manual %}
 <form method="post" class="p-4 border rounded-lg bg-white shadow-sm space-y-4">
     <input type="hidden" name="formulario" value="ventas_avanzadas_buscar">
@@ -37,7 +45,7 @@
 {% if ventas_producto_seleccionado %}
 <div class="mt-4 border rounded-lg bg-indigo-50 border-indigo-200 p-4 text-sm text-indigo-900">
     <p class="font-semibold">Producto seleccionado</p>
-    <p><strong>Código:</strong> {{ ventas_producto_seleccionado.codigo }}</p>
+    <p><strong>Código:</strong> {{ mostrar_codigo(ventas_producto_seleccionado.codigo) }}</p>
     <p><strong>Nombre:</strong> {{ ventas_producto_seleccionado.nombre }}</p>
     {% if ventas_producto_seleccionado.proveedor %}
     <p><strong>Proveedor:</strong> {{ ventas_producto_seleccionado.proveedor }}</p>
@@ -58,7 +66,7 @@
 {% if ventas_producto_complemento %}
 <div class="mt-4 border rounded-lg bg-purple-50 border-purple-200 p-4 text-sm text-purple-900">
     <p class="font-semibold">Complemento seleccionado</p>
-    <p><strong>Código:</strong> {{ ventas_producto_complemento.codigo }}</p>
+    <p><strong>Código:</strong> {{ mostrar_codigo(ventas_producto_complemento.codigo) }}</p>
     <p><strong>Nombre:</strong> {{ ventas_producto_complemento.nombre }}</p>
     {% if ventas_producto_complemento.proveedor %}
     <p><strong>Proveedor:</strong> {{ ventas_producto_complemento.proveedor }}</p>
@@ -106,7 +114,7 @@
             <div class="grid grid-cols-1 gap-3">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Producto seleccionado</label>
-                    <input type="text" value="{{ ventas_producto_seleccionado.codigo }} - {{ ventas_producto_seleccionado.nombre }}{% if ventas_producto_seleccionado.proveedor %} ({{ ventas_producto_seleccionado.proveedor }}){% endif %}" readonly class="mt-1 block w-full rounded-md border-gray-200 bg-gray-100 text-sm text-gray-700">
+                    <input type="text" value="{{ mostrar_codigo(ventas_producto_seleccionado.codigo) }} - {{ ventas_producto_seleccionado.nombre }}{% if ventas_producto_seleccionado.proveedor %} ({{ ventas_producto_seleccionado.proveedor }}){% endif %}" readonly class="mt-1 block w-full rounded-md border-gray-200 bg-gray-100 text-sm text-gray-700">
                 </div>
             </div>
             <div>
@@ -117,7 +125,7 @@
         </form>
         {% if ventas_resultado_por_monto %}
         <div class="mt-2 rounded-md border border-indigo-200 bg-indigo-50 p-4 text-sm text-indigo-900">
-            <p><strong>{{ ventas_resultado_por_monto.producto.nombre }}</strong> ({{ ventas_resultado_por_monto.producto.codigo }})</p>
+            <p><strong>{{ ventas_resultado_por_monto.producto.nombre }}</strong> ({{ mostrar_codigo(ventas_resultado_por_monto.producto.codigo) }})</p>
             {% if ventas_resultado_por_monto.producto.proveedor %}
                 <p class="text-xs text-blue-700">Proveedor: {{ ventas_resultado_por_monto.producto.proveedor }}</p>
             {% endif %}
@@ -159,7 +167,7 @@
             <div class="grid grid-cols-1 gap-3">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Producto seleccionado</label>
-                    <input type="text" value="{{ ventas_producto_seleccionado.codigo }} - {{ ventas_producto_seleccionado.nombre }}{% if ventas_producto_seleccionado.proveedor %} ({{ ventas_producto_seleccionado.proveedor }}){% endif %}" readonly class="mt-1 block w-full rounded-md border-gray-200 bg-gray-100 text-sm text-gray-700">
+                    <input type="text" value="{{ mostrar_codigo(ventas_producto_seleccionado.codigo) }} - {{ ventas_producto_seleccionado.nombre }}{% if ventas_producto_seleccionado.proveedor %} ({{ ventas_producto_seleccionado.proveedor }}){% endif %}" readonly class="mt-1 block w-full rounded-md border-gray-200 bg-gray-100 text-sm text-gray-700">
                 </div>
             </div>
             <div>
@@ -170,7 +178,7 @@
         </form>
         {% if ventas_resultado_por_cantidad %}
         <div class="mt-2 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
-            <p><strong>{{ ventas_resultado_por_cantidad.producto.nombre }}</strong> ({{ ventas_resultado_por_cantidad.producto.codigo }})</p>
+            <p><strong>{{ ventas_resultado_por_cantidad.producto.nombre }}</strong> ({{ mostrar_codigo(ventas_resultado_por_cantidad.producto.codigo) }})</p>
             {% if ventas_resultado_por_cantidad.producto.proveedor %}
                 <p class="text-xs text-blue-700">Proveedor: {{ ventas_resultado_por_cantidad.producto.proveedor }}</p>
             {% endif %}
@@ -211,7 +219,7 @@
                     </div>
                     {% if ventas_producto_seleccionado %}
                         <input type="hidden" name="ventas_nombre" value="{{ ventas_producto_seleccionado.nombre }}">
-                        <p class="text-xs text-gray-500 bg-indigo-50 border border-indigo-100 rounded-md px-3 py-2">{{ ventas_producto_seleccionado.codigo }} - {{ ventas_producto_seleccionado.nombre }}{% if ventas_producto_seleccionado.proveedor %} · <span class="text-blue-700">{{ ventas_producto_seleccionado.proveedor }}</span>{% endif %}</p>
+                        <p class="text-xs text-gray-500 bg-indigo-50 border border-indigo-100 rounded-md px-3 py-2">{{ mostrar_codigo(ventas_producto_seleccionado.codigo) }} - {{ ventas_producto_seleccionado.nombre }}{% if ventas_producto_seleccionado.proveedor %} · <span class="text-blue-700">{{ ventas_producto_seleccionado.proveedor }}</span>{% endif %}</p>
                     {% else %}
                         <div>
                             <label for="combo_nombre_principal" class="block text-xs font-medium text-gray-600">Nombre</label>
@@ -246,7 +254,7 @@
                     </div>
                     {% if ventas_producto_complemento %}
                         <input type="hidden" name="ventas_nombre_comp" value="{{ ventas_producto_complemento.nombre }}">
-                        <p class="text-xs text-gray-500 bg-purple-50 border border-purple-100 rounded-md px-3 py-2">{{ ventas_producto_complemento.codigo }} - {{ ventas_producto_complemento.nombre }}{% if ventas_producto_complemento.proveedor %} · <span class="text-blue-700">{{ ventas_producto_complemento.proveedor }}</span>{% endif %}</p>
+                        <p class="text-xs text-gray-500 bg-purple-50 border border-purple-100 rounded-md px-3 py-2">{{ mostrar_codigo(ventas_producto_complemento.codigo) }} - {{ ventas_producto_complemento.nombre }}{% if ventas_producto_complemento.proveedor %} · <span class="text-blue-700">{{ ventas_producto_complemento.proveedor }}</span>{% endif %}</p>
                     {% else %}
                         <div>
                             <label for="combo_nombre_complemento" class="block text-xs font-medium text-gray-600">Nombre</label>
@@ -354,7 +362,7 @@
             
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div class="space-y-1">
-                    <p class="font-semibold text-gray-900">{{ ventas_resultado_combo.producto_principal.nombre }} ({{ ventas_resultado_combo.producto_principal.codigo }})</p>
+                    <p class="font-semibold text-gray-900">{{ ventas_resultado_combo.producto_principal.nombre }} ({{ mostrar_codigo(ventas_resultado_combo.producto_principal.codigo) }})</p>
                     {% if ventas_resultado_combo.producto_principal.proveedor %}
                         <p class="text-xs text-blue-700">Proveedor: {{ ventas_resultado_combo.producto_principal.proveedor }}</p>
                     {% endif %}
@@ -369,7 +377,7 @@
                     {% endif %}
                 </div>
                 <div class="space-y-1">
-                    <p class="font-semibold text-gray-900">{{ ventas_resultado_combo.producto_complemento.nombre }} ({{ ventas_resultado_combo.producto_complemento.codigo }})</p>
+                    <p class="font-semibold text-gray-900">{{ ventas_resultado_combo.producto_complemento.nombre }} ({{ mostrar_codigo(ventas_resultado_combo.producto_complemento.codigo) }})</p>
                     {% if ventas_resultado_combo.producto_complemento.proveedor %}
                         <p class="text-xs text-blue-700">Proveedor: {{ ventas_resultado_combo.producto_complemento.proveedor }}</p>
                     {% endif %}
@@ -397,7 +405,7 @@
         {% set es_complemento = ventas_inputs.codigo_comp == producto.codigo %}
         <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between border rounded-lg bg-white shadow-sm px-4 py-3">
             <div class="space-y-1 text-sm text-gray-700">
-                <p><strong>Código:</strong> {{ producto.codigo }}</p>
+                <p><strong>Código:</strong> {{ mostrar_codigo(producto.codigo) }}</p>
                 <p><strong>Nombre:</strong> {{ producto.nombre }}</p>
                 {% if producto.proveedor %}
                 <p><strong>Proveedor:</strong> <span class="text-blue-600">{{ producto.proveedor }}</span></p>
@@ -553,7 +561,7 @@
                                 <ul class="mt-2 space-y-1 text-xs text-gray-600">
                                     {% for item in productos_combo %}
                                     <li class="rounded-md border border-dashed border-purple-200 bg-white/70 px-2 py-1">
-                                        <strong>{{ item.nombre }}</strong> ({{ item.codigo }})
+                                        <strong>{{ item.nombre }}</strong> ({{ mostrar_codigo(item.codigo) }})
                                         {% if operacion.modo == 'monto' %}
                                             — Por combo: {{ '%.0f'|format(item.cantidad_por_combo) }}
                                             — Total: {{ '%.0f'|format(item.cantidad) }}
@@ -568,7 +576,7 @@
                                 <p class="mt-2 text-sm font-semibold text-purple-900">Total combinado: ${{ formatear_precio(operacion.total) }}</p>
                             {% endif %}
                         {% else %}
-                            <p class="font-semibold text-gray-900">{{ operacion.producto.nombre }} ({{ operacion.producto.codigo }})</p>
+                            <p class="font-semibold text-gray-900">{{ operacion.producto.nombre }} ({{ mostrar_codigo(operacion.producto.codigo) }})</p>
                             <p class="text-xs text-gray-500">Precio unitario: ${{ formatear_precio(operacion.producto.precio) }}</p>
                             {% if operacion.tipo == 'monto' %}
                                 <p>Monto disponible: ${{ formatear_precio(operacion.monto) }}</p>

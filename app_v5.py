@@ -764,6 +764,150 @@ def normalize_text(text):
     return text.strip()
 
 
+_MEDIDA_RE = re.compile(r'(?<!\d)(\d+(?:[\.,]\d+)?)\s*(mm|cm|m)\b', re.IGNORECASE)
+
+
+def _parse_float_safe(raw):
+    try:
+        return float(str(raw).replace(',', '.').strip())
+    except Exception:
+        return None
+
+
+def _extract_medidas(texto: str):
+    medidas = []
+    if not texto:
+        return medidas
+    txt = str(texto)
+    for m in _MEDIDA_RE.finditer(txt):
+        valor = _parse_float_safe(m.group(1))
+        unidad = (m.group(2) or '').lower()
+        if valor is None or not unidad:
+            continue
+        medidas.append((round(valor, 4), unidad))
+    return medidas
+
+
+def _query_texto_sin_medidas(query: str) -> str:
+    base = _MEDIDA_RE.sub(' ', str(query or ''))
+    return normalize_text(base)
+
+
+def _token_match_by_wordprefix(token: str, haystack_norm: str) -> bool:
+    if not token:
+        return True
+    patron = rf'(^|\s){re.escape(token)}'
+    return re.search(patron, haystack_norm) is not None
+
+
+def _build_db_like_tokens(query: str):
+    tokens = [t for t in _query_texto_sin_medidas(query).split() if t]
+    for valor, unidad in _extract_medidas(query):
+        valor_int = int(valor) if float(valor).is_integer() else None
+        if valor_int is not None:
+            # En SQL usar tokens amplios; el match exacto de medida se valida luego
+            # con producto_coincide_busqueda para evitar falsos negativos.
+            tokens.extend([str(valor_int), unidad])
+        else:
+            valor_txt = str(valor).replace('.', '').replace(',', '')
+            if valor_txt:
+                tokens.extend([valor_txt, unidad])
+    dedup = []
+    vistos = set()
+    for t in tokens:
+        if t and t not in vistos:
+            vistos.add(t)
+            dedup.append(t)
+    return dedup
+
+
+def producto_coincide_busqueda(nombre: str, codigo: str, query: str) -> bool:
+    query = (query or '').strip()
+    if not query:
+        return True
+
+    nombre_norm = normalize_text(formatear_pulgadas(nombre or ''))
+    codigo_norm = normalize_text(codigo or '')
+    combinado = f"{nombre_norm} {codigo_norm}".strip()
+
+    tokens_texto = [t for t in _query_texto_sin_medidas(query).split() if t]
+    if any(not _token_match_by_wordprefix(t, combinado) for t in tokens_texto):
+        return False
+
+    medidas_query = _extract_medidas(query)
+    if medidas_query:
+        medidas_producto = _extract_medidas(nombre or '')
+        if codigo:
+            medidas_producto.extend(_extract_medidas(codigo or ''))
+        if not medidas_producto:
+            return False
+        for valor_obj, unidad_obj in medidas_query:
+            if not any((unidad == unidad_obj and abs(valor - valor_obj) <= 0.011) for valor, unidad in medidas_producto):
+                return False
+
+    return True
+
+
+def calcular_puntaje_relevancia(nombre: str, codigo: str, query: str) -> int:
+    query = (query or '').strip()
+    if not query:
+        return 0
+
+    nombre_norm = normalize_text(formatear_pulgadas(nombre or ''))
+    codigo_norm = normalize_text(codigo or '')
+    query_norm = _query_texto_sin_medidas(query)
+    tokens_texto = [t for t in query_norm.split() if t]
+
+    puntaje = 0
+
+    if query_norm:
+        if nombre_norm == query_norm:
+            puntaje += 300
+        if codigo_norm == query_norm:
+            puntaje += 260
+        if nombre_norm.startswith(query_norm):
+            puntaje += 180
+        if query_norm in nombre_norm:
+            puntaje += 90
+
+    for token in tokens_texto:
+        if _token_match_by_wordprefix(token, nombre_norm):
+            puntaje += 28
+        elif token in nombre_norm:
+            puntaje += 10
+        if _token_match_by_wordprefix(token, codigo_norm):
+            puntaje += 18
+        elif token in codigo_norm:
+            puntaje += 8
+
+    medidas_q = _extract_medidas(query)
+    if medidas_q:
+        medidas_prod = _extract_medidas(nombre or '') + _extract_medidas(codigo or '')
+        for valor_q, unidad_q in medidas_q:
+            if any(unidad == unidad_q and abs(valor - valor_q) <= 0.011 for valor, unidad in medidas_prod):
+                puntaje += 70
+
+    if query_norm and nombre_norm:
+        diff_len = max(0, len(nombre_norm) - len(query_norm))
+        puntaje -= min(25, diff_len // 6)
+
+    return int(puntaje)
+
+
+def ordenar_resultados_por_relevancia(resultados: list, query: str):
+    if not resultados:
+        return resultados
+
+    def _extract(item):
+        nombre = item.get('nombre') or item.get('producto') or ''
+        codigo = item.get('codigo') or ''
+        puntaje = calcular_puntaje_relevancia(nombre, codigo, query)
+        nombre_norm = normalize_text(formatear_pulgadas(nombre))
+        return -puntaje, nombre_norm
+
+    return sorted(resultados, key=_extract)
+
+
 def provider_name_to_key(name: str) -> str:
     if not name:
         return ''
@@ -853,11 +997,9 @@ def formatear_pulgadas(nombre_producto):
 
         return numero # Devuelve el número original si no coincide
 
-    # El regex ahora busca cualquier número de 2 a 4 dígitos que esté solo
-    # (rodeado de espacios o al final de la cadena) para evitar modificar
-    # códigos de producto como "AB1234".
-    # \b es un "word boundary" o límite de palabra.
-    return re.sub(r'\b(\d{2,4})\b', reemplazar, nombre_producto)
+    # Busca números de 2 a 4 dígitos aislados, evitando tocar decimales
+    # (ej: 13.00mm) o partes de otras expresiones numéricas.
+    return re.sub(r'(?<![0-9\.,/])(\d{2,4})(?![0-9\.,/])', reemplazar, nombre_producto)
 
 def parse_price_value(value):
     """
@@ -2109,19 +2251,45 @@ def importar_excel_con_mapeo_db(
         mtime = os.path.getmtime(temp_path)
         archivo_db = f"WIZARD-{provider_key}-{os.path.basename(original_filename or temp_filename)}"
 
+        stats = {
+            'total_filas': int(len(df)),
+            'importadas': 0,
+            'omitidas_vacias': 0,
+            'sin_codigo': 0,
+            'sin_nombre': 0,
+            'codigo_generado': 0,
+        }
+
         batch_rows = []
-        for _, fila in df.iterrows():
+        for row_number, (_, fila) in enumerate(df.iterrows(), start=1):
             raw_code = fila.get(col_codigo)
             raw_name = fila.get(col_nombre)
-            if pd.isna(raw_code) or pd.isna(raw_name):
+
+            code = ''
+            if raw_code is not None and not pd.isna(raw_code):
+                code = str(raw_code).strip()
+                if code.endswith('.0'):
+                    code = code[:-2] or code
+
+            name = ''
+            if raw_name is not None and not pd.isna(raw_name):
+                name = str(raw_name).strip()
+
+            # Si faltan ambos, no tiene sentido importarla
+            if not code and not name:
+                stats['omitidas_vacias'] += 1
                 continue
 
-            code = str(raw_code).strip()
-            if code.endswith('.0'):
-                code = code[:-2] or code
-            name = str(raw_name).strip()
-            if not code or not name:
-                continue
+            # Si falta nombre, usamos el código como etiqueta para no perder la fila
+            if not name and code:
+                name = code
+                stats['sin_nombre'] += 1
+
+            # Si falta código, generamos uno estable por fila para preservar el producto
+            if not code and name:
+                code = f"SIN-COD-{provider_key}-{row_number}"
+                stats['sin_codigo'] += 1
+                stats['codigo_generado'] += 1
 
             precio_val = None
             if col_precio and col_precio in df.columns and pd.notna(fila.get(col_precio)):
@@ -2157,8 +2325,13 @@ def importar_excel_con_mapeo_db(
                 json.dumps(extra, ensure_ascii=False)
             ))
 
+            stats['importadas'] = len(batch_rows)
+
         if not batch_rows:
-            return 0, '⚠️ No se encontraron filas válidas para importar.'
+            return 0, (
+                '⚠️ No se encontraron filas válidas para importar. '
+                f"Leídas: {stats['total_filas']} | Omitidas vacías: {stats['omitidas_vacias']}"
+            )
 
         with get_pg_conn() as conn, conn.cursor() as cur:
             cur.execute(
@@ -2191,7 +2364,17 @@ def importar_excel_con_mapeo_db(
         except Exception:
             pass
 
-        return len(batch_rows), None
+        resumen = (
+            f"Filas leídas: {stats['total_filas']} | "
+            f"Importadas: {stats['importadas']} | "
+            f"Omitidas vacías: {stats['omitidas_vacias']}"
+        )
+        if stats['sin_codigo']:
+            resumen += f" | Sin código (generado): {stats['sin_codigo']}"
+        if stats['sin_nombre']:
+            resumen += f" | Sin nombre (completado): {stats['sin_nombre']}"
+
+        return len(batch_rows), resumen
     except Exception as exc:
         return 0, f'❌ Error importando Excel con mapeo: {exc}'
 
@@ -2325,27 +2508,41 @@ def sync_listas_to_db():
                 extra_cols = [c for c in df_columns if normalize_text(str(c)) in [normalize_text(x) for x in precios_extra_alias]]
                 cantidad_col = _find_first_col(df_columns, cfg.get('extras', [])) if cfg.get('extras') else None
 
-                if not codigo_col or not nombre_col:
-                    print(f"[DEBUG sync_listas_to_db] Hoja {sheet_name}: no se encontraron columnas código/nombre, saltando...")
+                if not nombre_col:
+                    print(f"[DEBUG sync_listas_to_db] Hoja {sheet_name}: no se encontró columna nombre, saltando...")
                     continue
 
                 # OPTIMIZACIÓN: Recopilar todos los datos en un batch antes de insertar
                 batch_data = []
                 filas_insertadas_hoja = 0
                 
-                for _, fila in df.iterrows():
-                    # Código
-                    raw_code = fila.get(codigo_col)
-                    if pd.isna(raw_code):
-                        continue
-                    code = str(raw_code).strip()
-                    if code.endswith('.0'):
-                        code = code[:-2] or code
+                for row_number, (_, fila) in enumerate(df.iterrows(), start=1):
+                    # Código (puede faltar)
+                    code = ''
+                    if codigo_col:
+                        raw_code = fila.get(codigo_col)
+                        if raw_code is not None and not pd.isna(raw_code):
+                            code = str(raw_code).strip()
+                            if code.endswith('.0'):
+                                code = code[:-2] or code
+
                     # Nombre
                     raw_name = fila.get(nombre_col)
-                    if pd.isna(raw_name):
+                    name = ''
+                    if raw_name is not None and not pd.isna(raw_name):
+                        name = str(raw_name).strip()
+
+                    # Si faltan ambos, se omite
+                    if not code and not name:
                         continue
-                    name = str(raw_name).strip()
+
+                    # Si falta nombre pero hay código, usamos el código como nombre
+                    if not name and code:
+                        name = code
+
+                    # Si falta código pero hay nombre, generamos código interno estable
+                    if not code and name:
+                        code = f"SIN-COD-{provider_key}-{normalize_text(sheet_name)}-{row_number}"
 
                     # Precio canónico
                     price_val = None
@@ -2707,8 +2904,10 @@ def buscar_productos_manual_db(query: str, page: int, per_page: int):
     if not (DATABASE_URL and psycopg):
         return [], 0
     query = (query or '').strip()
-    tokens = [t for t in normalize_text(formatear_pulgadas(query)).split() if t]
+    tokens = _build_db_like_tokens(query)
     offset = max(0, (max(1, int(page)) - 1) * max(1, int(per_page)))
+    per_page = max(1, int(per_page))
+    fetch_limit = max(500, min(12000, per_page * 40))
 
     where = ["proveedor_key = 'manual'"]
     params = []
@@ -2720,19 +2919,15 @@ def buscar_productos_manual_db(query: str, page: int, per_page: int):
 
     try:
         with get_pg_conn() as conn, conn.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) AS c FROM productos_listas WHERE {where_sql}", params)
-            row = cur.fetchone()
-            total = (row.get('c') if isinstance(row, dict) else (row[0] if row else 0)) or 0
-
             cur.execute(
                 f"""
                 SELECT codigo, nombre, precio
                 FROM productos_listas
                 WHERE {where_sql}
                 ORDER BY nombre_normalizado ASC
-                LIMIT %s OFFSET %s
+                LIMIT %s
                 """,
-                params + [per_page, offset]
+                params + [fetch_limit]
             )
             resultados = []
             for r in cur.fetchall():
@@ -2742,13 +2937,17 @@ def buscar_productos_manual_db(query: str, page: int, per_page: int):
                     precio = r.get('precio')
                 else:
                     codigo, nombre, precio = r[0], r[1], r[2]
+                if not producto_coincide_busqueda(nombre or '', codigo or '', query):
+                    continue
                 resultados.append({
                     'codigo': str(codigo) if codigo is not None else '',
                     'nombre': nombre or '',
                     'precio': float(precio) if precio is not None else None,
                     'proveedor': 'Manual'
                 })
-            return resultados, total
+            resultados = ordenar_resultados_por_relevancia(resultados, query)
+            total = len(resultados)
+            return resultados[offset:offset + per_page], total
     except Exception as exc:
         log_debug('buscar_productos_manual_db: error', exc)
         return [], 0
@@ -2762,8 +2961,10 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
     if not (DATABASE_URL and psycopg):
         return [], 0
     query = (query or '').strip()
-    tokens = [t for t in normalize_text(formatear_pulgadas(query)).split() if t]
+    tokens = _build_db_like_tokens(query)
     offset = max(0, (max(1, int(page)) - 1) * max(1, int(per_page)))
+    per_page = max(1, int(per_page))
+    fetch_limit = max(800, min(15000, per_page * 50))
 
     where = []
     params = []
@@ -2783,21 +2984,16 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
 
     try:
         with get_pg_conn() as conn, conn.cursor() as cur:
-            # Contar total
-            cur.execute(f"SELECT COUNT(*) AS c FROM productos_listas WHERE {where_sql}", params)
-            row = cur.fetchone()
-            total = (row.get('c') if isinstance(row, dict) else (row[0] if row else 0)) or 0
-
-            # Obtener resultados paginados
+            # Obtener candidatos para re-ranking por relevancia
             cur.execute(
                 f"""
                 SELECT codigo, nombre, precio, precios, proveedor_key, proveedor_nombre, extra_datos, iva
                 FROM productos_listas
                 WHERE {where_sql}
                 ORDER BY proveedor_nombre ASC, nombre_normalizado ASC
-                LIMIT %s OFFSET %s
+                LIMIT %s
                 """,
-                params + [per_page, offset]
+                params + [fetch_limit]
             )
             resultados = []
             for r in cur.fetchall():
@@ -2812,6 +3008,9 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
                     iva = r.get('iva')
                 else:
                     codigo, nombre, precio, precios, proveedor_key, proveedor_nombre, extra_datos, iva = r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7]
+
+                if not producto_coincide_busqueda(nombre or '', codigo or '', query):
+                    continue
                 
                 # Parsear JSONB si viene como string
                 if isinstance(precios, str):
@@ -2893,7 +3092,9 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
                     'precios_calculados': precios_calculados,
                     'fuente': 'DB'
                 })
-            return resultados, total
+            resultados = ordenar_resultados_por_relevancia(resultados, query)
+            total = len(resultados)
+            return resultados[offset:offset + per_page], total
     except Exception as exc:
         log_debug('buscar_productos_avanzados_db: error', exc)
         return [], 0
@@ -3438,38 +3639,22 @@ def index():
                                         })
                             else:
                                 # Búsqueda por nombre
-                                termino_norm = normalize_text(formatear_pulgadas(termino_busqueda))
-                                palabras = [token for token in termino_norm.split() if token]
                                 for p in productos_manual_list:
-                                    nombre_norm = normalize_text(formatear_pulgadas(p.get('nombre', '')))
-                                    if palabras:
-                                        if all(palabra in nombre_norm for palabra in palabras):
-                                            productos_encontrados.append({
-                                                'codigo': str(p.get('codigo', '')),
-                                                'producto': p.get('nombre', ''),
-                                                'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
-                                                'proveedor_key': 'manual',
-                                                'sheet_name': 'Manual',
-                                                'iva': 'N/A',
-                                                'precios': {'Precio': p.get('precio', 0.0)},
-                                                'extra_datos': {},
-                                                'precios_calculados': {},
-                                                'fuente': 'Excel'
-                                            })
-                                    else:
-                                        if termino_norm in nombre_norm:
-                                            productos_encontrados.append({
-                                                'codigo': str(p.get('codigo', '')),
-                                                'producto': p.get('nombre', ''),
-                                                'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
-                                                'proveedor_key': 'manual',
-                                                'sheet_name': 'Manual',
-                                                'iva': 'N/A',
-                                                'precios': {'Precio': p.get('precio', 0.0)},
-                                                'extra_datos': {},
-                                                'precios_calculados': {},
-                                                'fuente': 'Excel'
-                                            })
+                                    codigo_p = str(p.get('codigo', ''))
+                                    nombre_p = p.get('nombre', '')
+                                    if producto_coincide_busqueda(nombre_p, codigo_p, termino_busqueda):
+                                        productos_encontrados.append({
+                                            'codigo': codigo_p,
+                                            'producto': nombre_p,
+                                            'proveedor': f"{p.get('proveedor', 'Manual')} (Hoja: Manual)",
+                                            'proveedor_key': 'manual',
+                                            'sheet_name': 'Manual',
+                                            'iva': 'N/A',
+                                            'precios': {'Precio': p.get('precio', 0.0)},
+                                            'extra_datos': {},
+                                            'precios_calculados': {},
+                                            'fuente': 'Excel'
+                                        })
 
                     # 2. Buscar en archivos Excel de proveedores
                     try:
@@ -3526,13 +3711,14 @@ def index():
                             if termino_busqueda.isdigit() and len(termino_busqueda) > 2:
                                 condition = codigo_series == termino_busqueda
                             else:
-                                termino_norm = normalize_text(formatear_pulgadas(termino_busqueda))
-                                palabras = [token for token in termino_norm.split() if token]
-                                producto_busqueda = df[actual_cols['producto']].apply(lambda x: normalize_text(formatear_pulgadas(x)))
-                                if palabras:
-                                    condition = producto_busqueda.apply(lambda nombre: all(palabra in nombre for palabra in palabras))
-                                else:
-                                    condition = producto_busqueda.str.contains(termino_norm)
+                                condition = df.apply(
+                                    lambda row: producto_coincide_busqueda(
+                                        row.get(actual_cols['producto'], ''),
+                                        str(row.get(actual_cols['codigo'], '')).split('.')[0] if pd.notna(row.get(actual_cols['codigo'])) else '',
+                                        termino_busqueda
+                                    ),
+                                    axis=1
+                                )
 
                             if not condition.any():
                                 continue
@@ -3554,6 +3740,7 @@ def index():
                 # Si estamos en fallback Excel (sin DB) y aún no se filtró, aplicar paginado en memoria
                 if (not (LISTAS_EN_DB and DATABASE_URL and psycopg)) or total_db == 0:
                     if productos_encontrados:
+                        productos_encontrados = ordenar_resultados_por_relevancia(productos_encontrados, termino_busqueda)
                         start_idx = (busqueda_page_value - 1) * busqueda_per_page_value
                         end_idx = start_idx + busqueda_per_page_value
                         total_db = len(productos_encontrados)
@@ -4682,7 +4869,7 @@ def index():
             if not col_codigo or not col_nombre:
                 mensaje = "⚠️ Debes mapear al menos las columnas de Código y Nombre."
             else:
-                filas_insertadas, import_error = importar_excel_con_mapeo_db(
+                filas_insertadas, import_info = importar_excel_con_mapeo_db(
                     temp_filename=temp_filename,
                     original_filename=original_filename,
                     provider_name=provider_name,
@@ -4694,10 +4881,14 @@ def index():
                     col_iva=col_iva,
                     cols_extra=cols_extra
                 )
-                if import_error:
-                    mensaje = import_error
+                if isinstance(import_info, str) and import_info.startswith(('⚠️', '❌')):
+                    mensaje = import_info
                 else:
-                    mensaje = f"✅ Importación guiada completada. Filas importadas: {filas_insertadas}."
+                    detalle = import_info if import_info else 'Sin detalle adicional.'
+                    mensaje = (
+                        f"✅ Importación guiada completada. Filas importadas: {filas_insertadas}. "
+                        f"{detalle}"
+                    )
 
     historial = load_historial()
     historial.reverse() 
@@ -5183,9 +5374,6 @@ def api_search():
                 excel_files = []
 
             proveedor_key_filter = provider_name_to_key(proveedor) if proveedor else ''
-            termino_norm = normalize_text(formatear_pulgadas(q))
-            palabras = [token for token in termino_norm.split() if token]
-
             for filename in excel_files:
                 if not filename.lower().endswith(('.xlsx', '.xls')):
                     continue
@@ -5228,11 +5416,14 @@ def api_search():
                     if not actual_cols['codigo'] or not actual_cols['producto']:
                         continue
 
-                    producto_busqueda = df[actual_cols['producto']].apply(lambda x: normalize_text(formatear_pulgadas(x)))
-                    if palabras:
-                        condition = producto_busqueda.apply(lambda nombre: all(palabra in nombre for palabra in palabras))
-                    else:
-                        condition = producto_busqueda.str.contains(termino_norm)
+                    condition = df.apply(
+                        lambda row: producto_coincide_busqueda(
+                            row.get(actual_cols['producto'], ''),
+                            str(row.get(actual_cols['codigo'], '')).split('.')[0] if pd.notna(row.get(actual_cols['codigo'])) else '',
+                            q
+                        ),
+                        axis=1
+                    )
 
                     for idx in df.index[condition]:
                         fila = df.loc[idx]
@@ -5289,6 +5480,8 @@ def api_search():
             'precios': precios if isinstance(precios, dict) else {},
             'extra_datos': extra if isinstance(extra, dict) else {},
         })
+
+    resultados_api = ordenar_resultados_por_relevancia(resultados_api, q)
 
     return jsonify(resultados_api)
 
