@@ -5444,12 +5444,130 @@ def barcode_search():
     )
 
 
+def _api_authorized():
+    expected_api_key = (os.getenv('API_KEY') or '').strip()
+    provided_api_key = (
+        request.args.get('key')
+        or request.headers.get('X-API-Key')
+        or request.headers.get('Authorization', '').replace('Bearer ', '').strip()
+    )
+    provided_api_key = (provided_api_key or '').strip()
+    return bool(expected_api_key) and provided_api_key == expected_api_key
+
+
+def _api_unauthorized_response():
+    return jsonify({'error': 'Unauthorized'}), 401
+
+
+def _format_calculadora_proveedor(pid, pdata):
+    return {
+        'id': pid,
+        'nombre_base': pdata.get('nombre_base', ''),
+        'nombre_visible': generar_nombre_visible(pdata),
+        'es_dinamico': bool(pdata.get('es_dinamico', False)),
+        'descuento': float(pdata.get('descuento', 0) or 0),
+        'iva': float(pdata.get('iva', 0) or 0),
+        'ganancia': float(pdata.get('ganancia', 0) or 0),
+    }
+
+
+@app.route('/api/calculadora/proveedores', methods=['GET'])
+def api_calculadora_proveedores():
+    if not _api_authorized():
+        return _api_unauthorized_response()
+
+    try:
+        items = [
+            _format_calculadora_proveedor(pid, pdata)
+            for pid, pdata in (proveedores or {}).items()
+        ]
+        items.sort(key=lambda x: normalize_text(x.get('nombre_visible', '')))
+        return jsonify(items)
+    except Exception as exc:
+        log_debug('api_calculadora_proveedores: error', exc)
+        return jsonify({'error': f'No se pudieron obtener proveedores: {exc}'}), 500
+
+
+@app.route('/api/calculadora/calcular-auto', methods=['POST'])
+def api_calculadora_calcular_auto():
+    if not _api_authorized():
+        return _api_unauthorized_response()
+
+    payload = request.get_json(silent=True) or {}
+    proveedor_id = (payload.get('proveedor_id') or '').strip()
+    precio_valor = payload.get('precio')
+
+    if not proveedor_id:
+        return jsonify({'error': 'proveedor_id es requerido'}), 400
+    if proveedor_id not in (proveedores or {}):
+        return jsonify({'error': 'Proveedor no encontrado'}), 404
+
+    try:
+        precio = parse_price_value(precio_valor)
+        if precio is None:
+            raise ValueError('precio inválido')
+
+        datos_prov = proveedores.get(proveedor_id, {})
+        descuento = float(datos_prov.get('descuento', 0) or 0)
+        iva = float(datos_prov.get('iva', 0) or 0)
+        ganancia = float(datos_prov.get('ganancia', 0) or 0)
+        precio_final = core_math(precio, iva, [descuento], [ganancia])
+
+        return jsonify({
+            'precio_base': round(float(precio), 4),
+            'precio_final': round(float(precio_final), 4),
+            'proveedor': _format_calculadora_proveedor(proveedor_id, datos_prov),
+            'porcentajes': {
+                'descuento': descuento,
+                'iva': iva,
+                'ganancia': ganancia,
+            }
+        })
+    except Exception as exc:
+        return jsonify({'error': f'No se pudo calcular: {exc}'}), 400
+
+
+@app.route('/api/calculadora/calcular-manual', methods=['POST'])
+def api_calculadora_calcular_manual():
+    if not _api_authorized():
+        return _api_unauthorized_response()
+
+    payload = request.get_json(silent=True) or {}
+    try:
+        precio = parse_price_value(payload.get('precio'))
+        if precio is None:
+            raise ValueError('precio inválido')
+
+        desc_manual = parse_percentage(payload.get('descuento')) or 0.0
+        desc_extra1 = parse_percentage(payload.get('descuento_extra_1')) or 0.0
+        desc_extra2 = parse_percentage(payload.get('descuento_extra_2')) or 0.0
+        iva_manual = parse_percentage(payload.get('iva')) or 0.0
+        ganc_manual = parse_percentage(payload.get('ganancia')) or 0.0
+        ganc_extra = parse_percentage(payload.get('ganancia_extra')) or 0.0
+
+        descuentos = [desc_manual, desc_extra1, desc_extra2]
+        ganancias = [ganc_manual, ganc_extra]
+        precio_final = core_math(precio, iva_manual, descuentos, ganancias)
+
+        return jsonify({
+            'precio_base': round(float(precio), 4),
+            'precio_final': round(float(precio_final), 4),
+            'porcentajes': {
+                'descuento': desc_manual,
+                'descuento_extra_1': desc_extra1,
+                'descuento_extra_2': desc_extra2,
+                'iva': iva_manual,
+                'ganancia': ganc_manual,
+                'ganancia_extra': ganc_extra,
+            }
+        })
+    except Exception as exc:
+        return jsonify({'error': f'No se pudo calcular: {exc}'}), 400
+
+
 @app.route('/api/search', methods=['GET'])
 def api_search():
-    expected_api_key = (os.getenv('API_KEY') or '').strip()
-    provided_api_key = (request.args.get('key') or '').strip()
-
-    if not expected_api_key or provided_api_key != expected_api_key:
+    if not _api_authorized():
         return jsonify({'error': 'Unauthorized'}), 401
 
     q = (request.args.get('q') or '').strip()
@@ -5667,10 +5785,7 @@ def _collect_api_proveedores():
 
 @app.route('/api/proveedores', methods=['GET'])
 def api_proveedores():
-    expected_api_key = (os.getenv('API_KEY') or '').strip()
-    provided_api_key = (request.args.get('key') or '').strip()
-
-    if not expected_api_key or provided_api_key != expected_api_key:
+    if not _api_authorized():
         return jsonify({'error': 'Unauthorized'}), 401
 
     return jsonify(_collect_api_proveedores())
