@@ -766,6 +766,30 @@ def normalize_text(text):
 
 _MEDIDA_RE = re.compile(r'(?<!\d)(\d+(?:[\.,]\d+)?)\s*(mm|cm|m)\b', re.IGNORECASE)
 
+_SEARCH_SYNONYMS = {
+    'jgo': ['juego', 'juegos', 'set'],
+    'juego': ['jgo', 'juegos', 'set'],
+    'juegos': ['jgo', 'juego', 'set'],
+    'set': ['jgo', 'juego'],
+    'boc': ['bocallave', 'bocallaves'],
+    'bocallave': ['boc', 'bocallaves'],
+    'bocallaves': ['boc', 'bocallave'],
+    'enc': ['encastre'],
+    'encastre': ['enc'],
+    'pz': ['pza', 'pzas', 'pieza', 'piezas'],
+    'pza': ['pz', 'pzas', 'pieza', 'piezas'],
+    'pzas': ['pz', 'pza', 'pieza', 'piezas'],
+    'torx': ['tx'],
+    'tx': ['torx'],
+    'llave': ['llaves'],
+    'llaves': ['llave'],
+    'crv': ['cromo', 'vanadio'],
+    'crmo': ['cromo', 'molibdeno'],
+    'mm': ['milimetro', 'milimetros'],
+    'cm': ['centimetro', 'centimetros'],
+    'nm': ['newtonmetro', 'newtonmetros']
+}
+
 
 def _parse_float_safe(raw):
     try:
@@ -800,24 +824,92 @@ def _token_match_by_wordprefix(token: str, haystack_norm: str) -> bool:
     return re.search(patron, haystack_norm) is not None
 
 
-def _build_db_like_tokens(query: str):
-    tokens = [t for t in _query_texto_sin_medidas(query).split() if t]
+def _expand_token_variants(token: str):
+    """Devuelve variantes normalizadas de un token técnico/abreviado."""
+    token = normalize_text(token)
+    if not token:
+        return []
+
+    variants = {token}
+    for syn in _SEARCH_SYNONYMS.get(token, []):
+        variants.add(normalize_text(syn))
+
+    if len(token) > 3:
+        if token.endswith('s'):
+            variants.add(token[:-1])
+        else:
+            variants.add(f"{token}s")
+
+    # Separación alfanumérica (ej. enc12 -> enc + 12)
+    m1 = re.match(r'^([a-z]+)(\d+)$', token)
+    if m1:
+        variants.add(m1.group(1))
+        variants.add(m1.group(2))
+    m2 = re.match(r'^(\d+)([a-z]+)$', token)
+    if m2:
+        variants.add(m2.group(1))
+        variants.add(m2.group(2))
+
+    cleaned = []
+    for v in variants:
+        vn = normalize_text(v)
+        if not vn:
+            continue
+        if len(vn) == 1 and not vn.isdigit():
+            continue
+        cleaned.append(vn)
+    return sorted(set(cleaned), key=lambda x: (len(x), x), reverse=True)
+
+
+def _build_db_like_token_groups(query: str):
+    """Construye grupos OR de tokens (AND entre grupos)."""
+    groups = []
+    seen = set()
+
+    base_tokens = [t for t in _query_texto_sin_medidas(query).split() if t]
+    for token in base_tokens:
+        variants = _expand_token_variants(token)
+        if not variants:
+            continue
+        key = tuple(variants)
+        if key in seen:
+            continue
+        seen.add(key)
+        groups.append(variants)
+
+    # Medidas como grupos independientes
     for valor, unidad in _extract_medidas(query):
-        valor_int = int(valor) if float(valor).is_integer() else None
-        if valor_int is not None:
-            # En SQL usar tokens amplios; el match exacto de medida se valida luego
-            # con producto_coincide_busqueda para evitar falsos negativos.
-            tokens.extend([str(valor_int), unidad])
+        if float(valor).is_integer():
+            measure_tokens = [str(int(valor)), unidad]
         else:
             valor_txt = str(valor).replace('.', '').replace(',', '')
-            if valor_txt:
-                tokens.extend([valor_txt, unidad])
+            measure_tokens = [valor_txt, unidad] if valor_txt else [unidad]
+        for token in measure_tokens:
+            token_n = normalize_text(token)
+            if not token_n:
+                continue
+            key = (token_n,)
+            if key in seen:
+                continue
+            seen.add(key)
+            groups.append([token_n])
+
+    return groups
+
+
+def _build_db_like_tokens(query: str):
+    # Compatibilidad con llamadas existentes: devuelve una versión "flatten"
+    # basada en los grupos OR.
+    groups = _build_db_like_token_groups(query)
     dedup = []
     vistos = set()
-    for t in tokens:
-        if t and t not in vistos:
-            vistos.add(t)
-            dedup.append(t)
+    for group in groups:
+        if not group:
+            continue
+        token = group[0]
+        if token and token not in vistos:
+            vistos.add(token)
+            dedup.append(token)
     return dedup
 
 
@@ -831,8 +923,15 @@ def producto_coincide_busqueda(nombre: str, codigo: str, query: str) -> bool:
     combinado = f"{nombre_norm} {codigo_norm}".strip()
 
     tokens_texto = [t for t in _query_texto_sin_medidas(query).split() if t]
-    if any(not _token_match_by_wordprefix(t, combinado) for t in tokens_texto):
-        return False
+    for token in tokens_texto:
+        variants = _expand_token_variants(token)
+        if not variants:
+            continue
+        if not any(
+            _token_match_by_wordprefix(v, combinado) or v in combinado
+            for v in variants
+        ):
+            return False
 
     medidas_query = _extract_medidas(query)
     if medidas_query:
@@ -871,13 +970,18 @@ def calcular_puntaje_relevancia(nombre: str, codigo: str, query: str) -> int:
             puntaje += 90
 
     for token in tokens_texto:
-        if _token_match_by_wordprefix(token, nombre_norm):
+        variants = _expand_token_variants(token)
+        if not variants:
+            continue
+
+        if any(_token_match_by_wordprefix(v, nombre_norm) for v in variants):
             puntaje += 28
-        elif token in nombre_norm:
+        elif any(v in nombre_norm for v in variants):
             puntaje += 10
-        if _token_match_by_wordprefix(token, codigo_norm):
+
+        if any(_token_match_by_wordprefix(v, codigo_norm) for v in variants):
             puntaje += 18
-        elif token in codigo_norm:
+        elif any(v in codigo_norm for v in variants):
             puntaje += 8
 
     medidas_q = _extract_medidas(query)
@@ -2904,17 +3008,22 @@ def buscar_productos_manual_db(query: str, page: int, per_page: int):
     if not (DATABASE_URL and psycopg):
         return [], 0
     query = (query or '').strip()
-    tokens = _build_db_like_tokens(query)
+    token_groups = _build_db_like_token_groups(query)
     offset = max(0, (max(1, int(page)) - 1) * max(1, int(per_page)))
     per_page = max(1, int(per_page))
     fetch_limit = max(500, min(12000, per_page * 40))
 
     where = ["proveedor_key = 'manual'"]
     params = []
-    for t in tokens:
-        where.append("(nombre_normalizado LIKE %s OR codigo_normalizado LIKE %s)")
-        like = f"%{t}%"
-        params.extend([like, like])
+    for group in token_groups:
+        if not group:
+            continue
+        or_parts = []
+        for t in group:
+            or_parts.append("(nombre_normalizado LIKE %s OR codigo_normalizado LIKE %s)")
+            like = f"%{t}%"
+            params.extend([like, like])
+        where.append(f"({' OR '.join(or_parts)})")
     where_sql = ' AND '.join(where) if where else 'TRUE'
 
     try:
@@ -2961,7 +3070,7 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
     if not (DATABASE_URL and psycopg):
         return [], 0
     query = (query or '').strip()
-    tokens = _build_db_like_tokens(query)
+    token_groups = _build_db_like_token_groups(query)
     offset = max(0, (max(1, int(page)) - 1) * max(1, int(per_page)))
     per_page = max(1, int(per_page))
     fetch_limit = max(800, min(15000, per_page * 50))
@@ -2974,11 +3083,19 @@ def buscar_productos_avanzados_db(query: str, page: int, per_page: int, proveedo
         where.append("proveedor_key = %s")
         params.append(proveedor_filter)
     
-    # Búsqueda por tokens en nombre o código
-    for t in tokens:
-        where.append("(nombre_normalizado LIKE %s OR codigo_normalizado LIKE %s)")
-        like = f"%{t}%"
-        params.extend([like, like])
+    # Búsqueda por grupos de tokens (OR dentro del grupo, AND entre grupos)
+    # Incluye también extra_datos para mejorar matcheo de términos técnicos.
+    for group in token_groups:
+        if not group:
+            continue
+        or_parts = []
+        for t in group:
+            or_parts.append(
+                "(nombre_normalizado LIKE %s OR codigo_normalizado LIKE %s OR COALESCE(extra_datos::text,'') ILIKE %s)"
+            )
+            like = f"%{t}%"
+            params.extend([like, like, like])
+        where.append(f"({' OR '.join(or_parts)})")
     
     where_sql = ' AND '.join(where) if where else 'TRUE'
 
